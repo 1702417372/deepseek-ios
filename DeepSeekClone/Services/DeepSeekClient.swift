@@ -368,7 +368,7 @@ final class DeepSeekClient {
         }
         let boundary = "DeepSeekCloneBoundary-" + UUID().uuidString
         var body = Data()
-        func append(_ text: String) { body.append(Data(text.utf8)) }
+        func append(_ text: String) { body.append(contentsOf: Data(text.utf8)) }
         append("--\(boundary)\r\n")
         append("Content-Disposition: form-data; name=\"purpose\"\r\n\r\n")
         append(purpose + "\r\n")

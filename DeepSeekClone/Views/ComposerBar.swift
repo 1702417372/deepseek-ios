@@ -137,7 +137,7 @@ struct ComposerBar: View {
 
     private var inputRow: some View {
         HStack(alignment: .bottom, spacing: 6) {
-            PhotosPicker(selection: $photoItem, maxSelectionCount: 1, matching: .images) {
+            PhotosPicker(selection: $photoItem, matching: .images) {
                 composerIcon("photo")
             }
             .disabled(isProcessing)
