@@ -402,6 +402,92 @@ final class DeepSeekClient {
         return fileID
     }
 
+    // MARK: - 语音（TTS / ASR）
+
+    private static func toolsBase(_ baseURL: String) -> String {
+        var base = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        if base.isEmpty { base = "https://api.deepseek.com" }
+        while base.hasSuffix("/") { base.removeLast() }
+        if base.hasSuffix("/chat/completions") { base = String(base.dropLast("/chat/completions".count)) }
+        return base
+    }
+
+    /// 朗读：返回 wav 音频数据（整段合成）。
+    static func textToSpeech(text: String, voice: String, apiKey: String, baseURL: String) async throws -> Data {
+        guard let url = URL(string: toolsBase(baseURL) + "/v1/tools/tts"), url.scheme?.lowercased() == "https" else {
+            throw DeepSeekError(message: "语音服务地址不可用，请检查 Base URL。")
+        }
+        let key = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { throw DeepSeekError(message: "还没有填写 API Key。") }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 180
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        request.setValue("DeepSeekClone/1.3 (iOS)", forHTTPHeaderField: "User-Agent")
+        let body: [String: Any] = [
+            "text": String(text.prefix(4000)),
+            "voice_id": voice.isEmpty ? "stella" : voice,
+            "format": "wav",
+            "filter_markdown": true
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw DeepSeekError(message: "语音合成返回了无法识别的响应。")
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            let raw = String(data: data, encoding: .utf8) ?? ""
+            throw DeepSeekError(message: DeepSeekClient.errorMessage(status: http.statusCode, body: raw))
+        }
+        guard data.count > 512 else {
+            throw DeepSeekError(message: "语音合成失败：返回的音频为空。")
+        }
+        return data
+    }
+
+    /// 语音输入：上传 wav / ogg，返回识别文本。
+    static func transcribeAudio(_ data: Data, filename: String, apiKey: String, baseURL: String) async throws -> String {
+        guard let url = URL(string: toolsBase(baseURL) + "/v1/tools/asr"), url.scheme?.lowercased() == "https" else {
+            throw DeepSeekError(message: "语音服务地址不可用，请检查 Base URL。")
+        }
+        let key = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { throw DeepSeekError(message: "还没有填写 API Key。") }
+        let boundary = "DeepSeekCloneASR-" + UUID().uuidString
+        var body = Data()
+        func append(_ text: String) { body.append(contentsOf: Data(text.utf8)) }
+        append("--\(boundary)\r\n")
+        append("Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n")
+        append("Content-Type: audio/wav\r\n\r\n")
+        body.append(data)
+        append("\r\n--\(boundary)--\r\n")
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 180
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        request.setValue("DeepSeekClone/1.3 (iOS)", forHTTPHeaderField: "User-Agent")
+        request.httpBody = body
+        let (responseData, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw DeepSeekError(message: "语音识别返回了无法识别的响应。")
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            let raw = String(data: responseData, encoding: .utf8) ?? ""
+            throw DeepSeekError(message: DeepSeekClient.errorMessage(status: http.statusCode, body: raw))
+        }
+        guard let json = try? JSONSerialization.jsonObject(with: responseData) as? [String: Any],
+              let text = json["text"] as? String else {
+            throw DeepSeekError(message: "语音识别失败：没有拿到文本。")
+        }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw DeepSeekError(message: "没有识别到内容，请靠近麦克风再说一次。")
+        }
+        return trimmed
+    }
+
     // MARK: - 连接测试
 
     func testConnection(model: String) async throws -> String {

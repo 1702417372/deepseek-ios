@@ -53,6 +53,8 @@ struct AppSettings: Codable, Equatable {
     var contextCharacterLimit: Int = 60000
     /// 消息字号缩放（0.85 / 1.0 / 1.15 / 1.3）
     var fontScale: Double = 1.0
+    /// 朗读音色：stella（女声）/ tide（男声）
+    var ttsVoice: String = "stella"
 
     init() {}
 
@@ -70,6 +72,7 @@ struct AppSettings: Codable, Equatable {
         case systemPrompt
         case contextCharacterLimit
         case fontScale
+        case ttsVoice
     }
 
     init(from decoder: Decoder) throws {
@@ -87,6 +90,7 @@ struct AppSettings: Codable, Equatable {
         systemPrompt = try container.decodeIfPresent(String.self, forKey: .systemPrompt) ?? ""
         contextCharacterLimit = try container.decodeIfPresent(Int.self, forKey: .contextCharacterLimit) ?? 60000
         fontScale = try container.decodeIfPresent(Double.self, forKey: .fontScale) ?? 1.0
+        ttsVoice = try container.decodeIfPresent(String.self, forKey: .ttsVoice) ?? "stella"
     }
 
     func encode(to encoder: Encoder) throws {
@@ -104,6 +108,7 @@ struct AppSettings: Codable, Equatable {
         try container.encode(systemPrompt, forKey: .systemPrompt)
         try container.encode(contextCharacterLimit, forKey: .contextCharacterLimit)
         try container.encode(fontScale, forKey: .fontScale)
+        try container.encode(ttsVoice, forKey: .ttsVoice)
     }
 
     var resolvedModel: DeepSeekModel {

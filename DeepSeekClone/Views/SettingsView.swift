@@ -29,6 +29,7 @@ struct SettingsView: View {
                 capabilitySection
                 generationSection
                 personalizationSection
+                voiceSection
                 dataSection
                 aboutSection
             }
@@ -274,6 +275,19 @@ struct SettingsView: View {
             Text("个性化")
         } footer: {
             Text("系统提示词会作为 system 消息加在每次请求最前面。")
+        }
+    }
+
+    private var voiceSection: some View {
+        Section {
+            Picker("朗读音色", selection: $draft.ttsVoice) {
+                Text("女声 · stella").tag("stella")
+                Text("男声 · tide").tag("tide")
+            }
+        } header: {
+            Text("语音")
+        } footer: {
+            Text("每条回答下方的「朗读」按钮会用这个音色合成语音；输入框的麦克风按钮把录音转成文字（ASR）。")
         }
     }
 

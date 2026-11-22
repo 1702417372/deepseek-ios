@@ -14,6 +14,7 @@ struct ChatScreen: View {
     @State private var draft = ""
     @State private var attachments: [ChatAttachment] = []
     @State private var showModelSheet = false
+    @StateObject private var tts = TTSPlayer()
     @FocusState private var isInputFocused: Bool
 
     private let bottomID = "chat-bottom"
@@ -55,6 +56,12 @@ struct ChatScreen: View {
             ModelPickerSheet()
                 .environmentObject(settingsStore)
                 .environmentObject(modelCatalog)
+        }
+        .onChange(of: tts.errorMessage) { message in
+            if let message, !message.isEmpty {
+                onToast(message)
+                tts.errorMessage = nil
+            }
         }
         .alert("请求失败", isPresented: errorBinding) {
             Button("重试") { chat.regenerate(settings: settings) }
@@ -143,12 +150,14 @@ struct ChatScreen: View {
                                 isStreaming: chat.isStreaming && index == conversation.messages.count - 1,
                                 isLastAssistant: isLastAssistantMessage(at: index, in: conversation),
                                 fontScale: CGFloat(settings.fontScale),
+                                isSpeaking: tts.speakingMessageID == message.id,
                                 onCopy: {
                                     UIPasteboard.general.string = message.content
                                     onToast("已复制")
                                 },
                                 onDelete: { chat.deleteMessage(message.id) },
-                                onRegenerate: { chat.regenerate(settings: settings) }
+                                onRegenerate: { chat.regenerate(settings: settings) },
+                                onSpeak: { speak(message) }
                             )
                         }
                         Color.clear
@@ -178,6 +187,7 @@ struct ChatScreen: View {
             }
             .onChange(of: conversation?.id) { _ in
                 attachments = []
+                tts.stop()
                 scrollToBottom(proxy)
             }
         }
@@ -205,6 +215,16 @@ struct ChatScreen: View {
             draft = ""
             attachments = []
         }
+    }
+
+    private func speak(_ message: ChatMessage) {
+        tts.speak(
+            messageID: message.id,
+            text: message.content,
+            voice: settings.ttsVoice,
+            apiKey: settings.apiKey,
+            baseURL: settings.baseURL
+        )
     }
 
     private func toggleThinking() {

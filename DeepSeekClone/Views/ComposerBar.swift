@@ -1,4 +1,5 @@
 import SwiftUI
+import Foundation
 import PhotosUI
 import UIKit
 
@@ -24,6 +25,8 @@ struct ComposerBar: View {
     @State private var photoItem: PhotosPickerItem?
     @State private var showFileImporter = false
     @State private var isProcessing = false
+    @State private var isTranscribing = false
+    @StateObject private var recorder = VoiceRecorder()
 
     private var trimmedText: String {
         text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -39,10 +42,14 @@ struct ComposerBar: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            chipRow
-            inputRow
-            if !attachments.isEmpty {
-                attachmentRow
+            if recorder.isRecording {
+                recordingRow
+            } else {
+                chipRow
+                inputRow
+                if !attachments.isEmpty {
+                    attachmentRow
+                }
             }
         }
         .padding(.horizontal, 12)
@@ -52,6 +59,11 @@ struct ComposerBar: View {
         .onChange(of: photoItem) { item in
             guard let item else { return }
             processPhoto(item)
+        }
+        .onChange(of: recorder.elapsed) { value in
+            if value >= VoiceRecorder.maxDuration, recorder.isRecording {
+                finishRecordingAndTranscribe()
+            }
         }
         .fileImporter(
             isPresented: $showFileImporter,
@@ -103,7 +115,7 @@ struct ComposerBar: View {
 
             Spacer(minLength: 0)
 
-            if isProcessing {
+            if isProcessing || isTranscribing {
                 ProgressView().controlSize(.mini)
             } else if isStreaming {
                 Text("正在生成…")
@@ -164,6 +176,19 @@ struct ComposerBar: View {
                 .font(.system(size: 16))
                 .lineLimit(1...6)
                 .padding(.vertical, 5)
+
+            Button {
+                startRecording()
+            } label: {
+                Image(systemName: "mic.fill")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(DSTheme.textSecondary)
+                    .frame(width: 30, height: 30)
+                    .background(DSTheme.surfaceStrong.opacity(0.9), in: Circle())
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .disabled(isProcessing || isTranscribing || isStreaming)
 
             Button {
                 if isStreaming {
@@ -249,6 +274,99 @@ struct ComposerBar: View {
             }
             .padding(.horizontal, 4)
         }
+    }
+
+    // MARK: - 录音
+
+    private var recordingRow: some View {
+        HStack(spacing: 10) {
+            Circle()
+                .fill(Color.red)
+                .frame(width: 9, height: 9)
+            Text(Self.durationText(recorder.elapsed))
+                .font(.system(size: 15, weight: .semibold, design: .monospaced))
+                .foregroundStyle(DSTheme.textPrimary)
+            Text("正在录音，说完点完成")
+                .font(.system(size: 12))
+                .foregroundStyle(DSTheme.textSecondary)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+            Button {
+                recorder.cancel()
+            } label: {
+                Text("取消")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(DSTheme.textSecondary)
+            }
+            .buttonStyle(.plain)
+            Button {
+                finishRecordingAndTranscribe()
+            } label: {
+                Text(isTranscribing ? "识别中…" : "完成")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 13)
+                    .padding(.vertical, 7)
+                    .background(DSTheme.accent, in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .disabled(isTranscribing)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(DSTheme.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(Color.red.opacity(0.35), lineWidth: 1)
+        )
+    }
+
+    private func startRecording() {
+        guard !isProcessing, !isTranscribing else { return }
+        guard settings.hasAPIKey else {
+            onToast("先在设置里填 API Key 才能语音输入")
+            return
+        }
+        isFocused = false
+        Task { @MainActor in
+            let started = await recorder.start()
+            if !started, let message = recorder.errorMessage {
+                onToast(message)
+                recorder.errorMessage = nil
+            }
+        }
+    }
+
+    private func finishRecordingAndTranscribe() {
+        guard let data = recorder.finish() else {
+            onToast("没有录到声音，请重试")
+            return
+        }
+        isTranscribing = true
+        Task { @MainActor in
+            do {
+                let text = try await DeepSeekClient.transcribeAudio(
+                    data,
+                    filename: "speech.wav",
+                    apiKey: settings.apiKey,
+                    baseURL: settings.baseURL
+                )
+                if self.text.isEmpty {
+                    self.text = text
+                } else {
+                    self.text += "\n" + text
+                }
+                onToast("已转成文字")
+            } catch {
+                onToast((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+            }
+            isTranscribing = false
+        }
+    }
+
+    private static func durationText(_ value: TimeInterval) -> String {
+        let seconds = max(0, Int(value))
+        return String(format: "%02d:%02d", seconds / 60, seconds % 60)
     }
 
     // MARK: - 处理附件

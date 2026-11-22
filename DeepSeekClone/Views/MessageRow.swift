@@ -6,10 +6,12 @@ struct MessageRow: View {
     let isStreaming: Bool
     let isLastAssistant: Bool
     let fontScale: CGFloat
+    let isSpeaking: Bool
 
     var onCopy: () -> Void
     var onDelete: () -> Void
     var onRegenerate: () -> Void
+    var onSpeak: () -> Void
 
     private var textSize: CGFloat { 16 * fontScale }
     private var smallSize: CGFloat { 13 * fontScale }
@@ -155,6 +157,7 @@ struct MessageRow: View {
             if !message.content.isEmpty {
                 Button { onCopy() } label: { Label("复制", systemImage: "doc.on.doc") }
             }
+            Button { onSpeak() } label: { Label(isSpeaking ? "停止朗读" : "朗读", systemImage: isSpeaking ? "stop.circle" : "speaker.wave.2") }
             if isLastAssistant {
                 Button { onRegenerate() } label: { Label("重新生成", systemImage: "arrow.clockwise") }
             }
@@ -196,6 +199,10 @@ struct MessageRow: View {
         HStack(spacing: 20) {
             Button(action: onCopy) {
                 Image(systemName: "doc.on.doc")
+            }
+            Button(action: onSpeak) {
+                Image(systemName: isSpeaking ? "stop.circle" : "speaker.wave.2")
+                    .foregroundStyle(isSpeaking ? DSTheme.accent : DSTheme.textSecondary)
             }
             if isLastAssistant {
                 Button(action: onRegenerate) {
