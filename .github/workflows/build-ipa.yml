@@ -1,0 +1,81 @@
+name: Build unsigned IPA
+
+# 在 GitHub 免费的 macOS 机器上编译 iOS 工程，产出未签名的 .ipa。
+# 未签名 ipa 不能双击安装，需要用 Sideloadly / AltStore 用自己的 Apple ID 重签名后安装。
+# 详细说明见仓库根目录 README.md。
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build-ipa:
+    name: Compile & package (unsigned)
+    runs-on: macos-15
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+
+      # 这一步只是提前暴露编译错误，失败了不阻塞真正的出包步骤
+      - name: Compile check (iOS Simulator, informational)
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project DeepSeekClone.xcodeproj \
+            -scheme DeepSeekClone \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Build device app (no signing)
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project DeepSeekClone.xcodeproj \
+            -scheme DeepSeekClone \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: Package unsigned IPA
+        run: |
+          set -euo pipefail
+          APP_PATH="build/Build/Products/Release-iphoneos/DeepSeekClone.app"
+          test -d "$APP_PATH" || (echo "找不到 app，编译可能失败" && exit 1)
+
+          rm -rf Payload DeepSeekClone-unsigned.ipa
+          mkdir -p Payload
+          cp -R "$APP_PATH" Payload/
+          rm -rf Payload/DeepSeekClone.app/_CodeSignature
+          zip -qry DeepSeekClone-unsigned.ipa Payload
+
+          echo "---- IPA 内容 ----"
+          unzip -l DeepSeekClone-unsigned.ipa | head -30
+          ls -lh DeepSeekClone-unsigned.ipa
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: DeepSeekClone-unsigned-ipa
+          path: DeepSeekClone-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 30
