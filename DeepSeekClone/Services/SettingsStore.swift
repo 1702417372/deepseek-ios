@@ -20,6 +20,14 @@ final class SettingsStore: ObservableObject {
            let decoded = try? JSONDecoder().decode(AppSettings.self, from: data) {
             loaded = decoded
         }
+        // 旧版本保存过 deepseek-chat / reasoner 等模型名，新版 API 已停用，迁移到 deepseek-flash
+        let legacyModelIDs: Set<String> = [
+            "deepseek-chat", "deepseek-reasoner", "deepseek-v3", "deepseek-r1",
+            "deepseek-v3.2", "deepseek-v4-flash", "deepseek-v4-flash-vision-exp"
+        ]
+        if legacyModelIDs.contains(loaded.model) {
+            loaded.model = "deepseek-flash"
+        }
         loaded.apiKey = KeychainHelper.read(for: apiKeyAccount) ?? ""
         settings = loaded
     }

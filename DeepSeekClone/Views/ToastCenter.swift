@@ -5,18 +5,18 @@ import SwiftUI
 final class ToastCenter: ObservableObject {
     @Published private(set) var message: String?
 
-    private var workItem: DispatchWorkItem?
+    private var hideTask: Task<Void, Never>?
 
     func show(_ text: String) {
         message = text
-        workItem?.cancel()
-        let item = DispatchWorkItem { [weak self] in
+        hideTask?.cancel()
+        hideTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 1_800_000_000)
+            guard !Task.isCancelled else { return }
             withAnimation(.easeOut(duration: 0.2)) {
                 self?.message = nil
             }
         }
-        workItem = item
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.8, execute: item)
     }
 }
 

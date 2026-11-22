@@ -118,8 +118,4 @@ struct AppSettings: Codable, Equatable {
     var hasAPIKey: Bool {
         !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
-
-    var messageFontSize: CGFloat {
-        CGFloat(16.0 * fontScale)
-    }
 }
