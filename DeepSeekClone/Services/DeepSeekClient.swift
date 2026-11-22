@@ -181,12 +181,14 @@ final class DeepSeekClient {
             body["temperature"] = min(max(options.temperature, 0), 2)
         }
 
+        // deepseek-v4-pro 不支持服务端工具（联网/阅读链接）与 title 生成，传了会直接 400
+        let serverToolsAvailable = options.model != "deepseek-v4-pro"
         var tools: [[String: Any]] = []
-        if options.webSearchEnabled { tools.append(["type": "deepseek_web_search"]) }
-        if options.readURLEnabled { tools.append(["type": "deepseek_read_url"]) }
+        if options.webSearchEnabled, serverToolsAvailable { tools.append(["type": "deepseek_web_search"]) }
+        if options.readURLEnabled, serverToolsAvailable { tools.append(["type": "deepseek_read_url"]) }
         if !tools.isEmpty { body["tools"] = tools }
         if options.safetyCheckEnabled { body["safety_check"] = ["level": "high"] }
-        if options.autoTitleEnabled { body["title"] = ["enabled": true] }
+        if options.autoTitleEnabled, serverToolsAvailable { body["title"] = ["enabled": true] }
         return body
     }
 

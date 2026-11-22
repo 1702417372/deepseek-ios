@@ -125,6 +125,10 @@ struct SettingsView: View {
                     if let effort = option.defaultEffort {
                         draft.reasoningEffort = effort
                     }
+                    if option.id == "deepseek-v4-pro" {
+                        draft.webSearchEnabled = false
+                        draft.readURLEnabled = false
+                    }
                 } label: {
                     HStack(alignment: .top, spacing: 10) {
                         VStack(alignment: .leading, spacing: 2) {

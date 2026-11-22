@@ -216,11 +216,9 @@ struct ChatScreen: View {
     private func toggleWebSearch() {
         var updated = settingsStore.settings
         updated.webSearchEnabled.toggle()
-        if updated.webSearchEnabled {
-            if let option = modelCatalog.option(for: updated.model), !option.supportsImages && option.id.contains("v4-pro") {
-                onToast("V4-Pro 不支持联网搜索，已切到 V4.1-Flash")
-                updated.model = "deepseek-flash"
-            }
+        if updated.webSearchEnabled, updated.model == "deepseek-v4-pro" {
+            onToast("V4-Pro 不支持联网搜索，已切到 V4.1-Flash")
+            updated.model = "deepseek-flash"
         }
         settingsStore.settings = updated
     }
