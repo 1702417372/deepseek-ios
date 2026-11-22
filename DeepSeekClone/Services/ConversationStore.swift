@@ -16,7 +16,25 @@ final class ConversationStore: ObservableObject {
     }
 
     var sorted: [Conversation] {
-        conversations.sorted { $0.updatedAt > $1.updatedAt }
+        conversations.sorted { lhs, rhs in
+            let leftPinned = lhs.isPinned ?? false
+            let rightPinned = rhs.isPinned ?? false
+            if leftPinned != rightPinned { return leftPinned }
+            return lhs.updatedAt > rhs.updatedAt
+        }
+    }
+
+    func rename(_ id: UUID, to title: String) {
+        guard let index = conversations.firstIndex(where: { $0.id == id }) else { return }
+        conversations[index].title = title
+        conversations[index].updatedAt = Date()
+        saveSoon()
+    }
+
+    func togglePin(_ id: UUID) {
+        guard let index = conversations.firstIndex(where: { $0.id == id }) else { return }
+        conversations[index].isPinned = !(conversations[index].isPinned ?? false)
+        saveSoon()
     }
 
     func conversation(with id: UUID) -> Conversation? {

@@ -4,25 +4,39 @@ import UIKit
 struct RootView: View {
     @EnvironmentObject private var settingsStore: SettingsStore
     @EnvironmentObject private var conversationStore: ConversationStore
+    @EnvironmentObject private var modelCatalog: ModelCatalog
     @Environment(\.scenePhase) private var scenePhase
 
     @StateObject private var chat = ChatViewModel()
+    @StateObject private var toast = ToastCenter()
 
     @State private var sidebarOpen = false
-    @State private var showSettings = false
     @State private var didBootstrap = false
+    @State private var activeSheet: ActiveSheet?
     @State private var confirmClearChat = false
+
+    private enum ActiveSheet: Identifiable {
+        case settings
+        case share(URL)
+        case rename(Conversation)
+
+        var id: String {
+            switch self {
+            case .settings: return "settings"
+            case .share(let url): return "share-" + url.absoluteString
+            case .rename(let conversation): return "rename-" + conversation.id.uuidString
+            }
+        }
+    }
 
     var body: some View {
         ZStack(alignment: .leading) {
             ChatScreen(
                 chat: chat,
-                settings: settingsStore.settings,
                 onMenu: { setSidebar(true) },
                 onNewChat: { newChat() },
-                onOpenSettings: { showSettings = true },
-                onSelectModel: { selectModel($0) },
-                onClear: { confirmClearChat = true }
+                onOpenSettings: { activeSheet = .settings },
+                onToast: { toast.show($0) }
             )
             .disabled(sidebarOpen)
 
@@ -46,9 +60,20 @@ struct RootView: View {
                     onDelete: { id in
                         conversationStore.delete(id)
                     },
+                    onRename: { conversation in
+                        setSidebar(false)
+                        activeSheet = .rename(conversation)
+                    },
+                    onExport: { conversation in
+                        setSidebar(false)
+                        export(conversation)
+                    },
+                    onTogglePin: { conversation in
+                        conversationStore.togglePin(conversation.id)
+                    },
                     onSettings: {
                         setSidebar(false)
-                        showSettings = true
+                        activeSheet = .settings
                     }
                 )
                 .frame(width: sidebarWidth)
@@ -56,38 +81,63 @@ struct RootView: View {
                 .zIndex(1)
             }
         }
+        .overlay(alignment: .bottom) { toastOverlay }
         .animation(.spring(response: 0.32, dampingFraction: 0.86), value: sidebarOpen)
+        .animation(.easeInOut(duration: 0.2), value: toast.message)
         .onAppear(perform: bootstrap)
-        .sheet(isPresented: $showSettings) {
-            SettingsView()
-                .environmentObject(settingsStore)
-                .environmentObject(conversationStore)
-        }
-        .alert("清空当前对话？", isPresented: $confirmClearChat) {
-            Button("清空", role: .destructive) {
-                chat.clearCurrentConversation()
-            }
-            Button("取消", role: .cancel) { }
-        } message: {
-            Text("只会清空当前会话里的消息。")
+        .task { await refreshModelsIfNeeded() }
+        .onChange(of: settingsStore.settings.apiKey) { _ in
+            Task { await refreshModelsIfNeeded() }
         }
         .onChange(of: scenePhase) { phase in
             if phase != .active {
-                // 先把流式中的内容同步给存储层，再立即写盘
                 chat.flushToStore()
                 conversationStore.saveNow()
             }
         }
         .onChange(of: conversationStore.conversations.map(\.id)) { ids in
-            // 当前会话被删除（单条删除或清空全部）时，自动切到最近会话或新建
             guard let current = chat.conversation, !ids.contains(current.id) else { return }
             if let next = conversationStore.sorted.first {
                 chat.open(next)
             } else {
-                // 不能调 newChat()：当前会话为空时它会提前 return，导致 chat 仍指向已删除的会话
                 let conversation = conversationStore.createConversation(model: settingsStore.settings.model)
                 chat.open(conversation)
             }
+        }
+        .sheet(item: $activeSheet) { sheet in
+            switch sheet {
+            case .settings:
+                SettingsView()
+                    .environmentObject(settingsStore)
+                    .environmentObject(conversationStore)
+                    .environmentObject(modelCatalog)
+            case .share(let url):
+                ShareSheet(url: url)
+            case .rename(let conversation):
+                RenameSheet(conversation: conversation) { newTitle in
+                    conversationStore.rename(conversation.id, to: newTitle)
+                    if var current = chat.conversation, current.id == conversation.id {
+                        current.title = newTitle
+                        chat.open(current)
+                    }
+                }
+            }
+        }
+        .confirmationDialog("清空当前对话？", isPresented: $confirmClearChat, titleVisibility: .visible) {
+            Button("清空", role: .destructive) {
+                chat.clearCurrentConversation()
+            }
+            Button("取消", role: .cancel) { }
+        }
+    }
+
+    @ViewBuilder
+    private var toastOverlay: some View {
+        if let message = toast.message {
+            ToastView(text: message)
+                .padding(.bottom, 120)
+                .transition(.opacity)
+                .allowsHitTesting(false)
         }
     }
 
@@ -109,6 +159,12 @@ struct RootView: View {
         chat.onConversationChanged = { conversation in
             conversationStore.upsert(conversation)
         }
+
+        if let screen = DemoSupport.requestedScreen {
+            setupDemo(screen)
+            return
+        }
+
         if let existing = conversationStore.sorted.first {
             chat.open(existing)
         } else {
@@ -117,17 +173,48 @@ struct RootView: View {
         }
     }
 
+    private func setupDemo(_ screen: String) {
+        var conversation: Conversation
+        if screen == "home" {
+            conversation = Conversation(model: settingsStore.settings.model)
+        } else {
+            conversation = DemoSupport.demoConversation()
+        }
+        conversationStore.upsert(conversation)
+        chat.open(conversation)
+
+        if screen == "drawer" {
+            sidebarOpen = true
+        } else if screen == "settings" {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                activeSheet = .settings
+            }
+        }
+    }
+
+    private func refreshModelsIfNeeded() async {
+        let settings = settingsStore.settings
+        guard settings.hasAPIKey else { return }
+        await modelCatalog.refresh(apiKey: settings.apiKey, baseURL: settings.baseURL)
+    }
+
     private func newChat() {
+        // 当前会话是空的时候先删掉，避免侧边栏堆一堆空对话
         if let current = chat.conversation, current.isEmpty {
-            return
+            conversationStore.delete(current.id)
         }
         let conversation = conversationStore.createConversation(model: settingsStore.settings.model)
         chat.open(conversation)
+        toast.show("已新建对话")
+        _ = UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
 
-    private func selectModel(_ model: DeepSeekModel) {
-        var updated = settingsStore.settings
-        updated.model = model.rawValue
-        settingsStore.settings = updated
+    private func export(_ conversation: Conversation) {
+        do {
+            let url = try ConversationExporter.writeTemporaryFile(for: conversation)
+            activeSheet = .share(url)
+        } catch {
+            toast.show("导出失败：\(error.localizedDescription)")
+        }
     }
 }

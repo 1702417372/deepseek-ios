@@ -77,6 +77,7 @@ enum MarkdownParser {
 
 struct MarkdownText: View {
     let content: String
+    var fontSize: CGFloat = 16
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -84,14 +85,14 @@ struct MarkdownText: View {
                 switch block.kind {
                 case .text(let text):
                     Text(MarkdownParser.attributed(text))
-                        .font(.system(size: 16))
+                        .font(.system(size: fontSize))
                         .lineSpacing(4)
                         .foregroundStyle(DSTheme.textPrimary)
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 case .code(let language, let code):
-                    CodeBlockView(language: language, code: code)
+                    CodeBlockView(language: language, code: code, fontSize: max(11, fontSize - 3))
                 }
             }
         }
@@ -102,6 +103,7 @@ struct MarkdownText: View {
 struct CodeBlockView: View {
     let language: String
     let code: String
+    var fontSize: CGFloat = 13
 
     @State private var copied = false
 
@@ -137,7 +139,7 @@ struct CodeBlockView: View {
 
             ScrollView(.horizontal, showsIndicators: false) {
                 Text(code)
-                    .font(.system(size: 13, design: .monospaced))
+                    .font(.system(size: fontSize, design: .monospaced))
                     .foregroundStyle(DSTheme.textPrimary)
                     .textSelection(.enabled)
                     .padding(12)

@@ -53,22 +53,16 @@ enum DSTheme {
     }
 }
 
-/// DeepSeek 小鲸鱼风格头像。
+/// 小肥鱼头像（与 App 图标同一张图）。
 struct AssistantAvatar: View {
     var size: CGFloat = 28
 
     var body: some View {
-        Image(systemName: "fish.fill")
-            .font(.system(size: size * 0.46, weight: .bold))
-            .foregroundStyle(.white)
+        Image("AppLogo")
+            .resizable()
+            .scaledToFill()
             .frame(width: size, height: size)
-            .background(
-                LinearGradient(
-                    colors: [DSTheme.accent, DSTheme.accentDeep],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ),
-                in: Circle()
-            )
+            .clipShape(Circle())
+            .overlay(Circle().stroke(Color.white.opacity(0.18), lineWidth: 0.5))
     }
 }

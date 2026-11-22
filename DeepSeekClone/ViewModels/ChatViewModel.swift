@@ -1,25 +1,21 @@
 import Foundation
 import SwiftUI
 
-/// 单个会话的聊天状态机：负责发送、流式接收、中断、重试。
+/// 单个会话的聊天状态机：发送（含图片/文件）、流式接收、联网搜索进度、中断、重试。
 @MainActor
 final class ChatViewModel: ObservableObject {
     @Published var conversation: Conversation?
     @Published var isStreaming = false
     @Published var errorMessage: String?
 
-    /// 会话内容变化时回调给持久化层（每个 token 不回调，只在关键节点回调）。
     var onConversationChanged: ((Conversation) -> Void)?
 
     private var streamTask: Task<Void, Never>?
-    /// 每发起一次请求就自增，用来丢弃旧请求迟到的回调，避免中断后串到新消息上。
     private var streamGeneration = 0
-    /// 流式期间每累积若干片段才回调一次持久化，避免高频写盘。
     private var persistedChunkCount = 0
 
     func open(_ conversation: Conversation) {
         if isStreaming {
-            // 切换会话时静默中断，不回调持久化，避免把已删除的旧会话又写回存储
             streamGeneration += 1
             streamTask?.cancel()
             streamTask = nil
@@ -29,19 +25,24 @@ final class ChatViewModel: ObservableObject {
         errorMessage = nil
     }
 
-    /// 发送一条用户消息并开始接收回答；返回 false 表示没有发起请求。
     @discardableResult
-    func send(_ text: String, settings: AppSettings) -> Bool {
+    func send(_ text: String, attachments: [ChatAttachment] = [], settings: AppSettings) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, !isStreaming, var current = conversation else { return false }
+        guard (!trimmed.isEmpty || !attachments.isEmpty), !isStreaming, var current = conversation else { return false }
         guard settings.hasAPIKey else {
             errorMessage = "还没有配置 API Key。请打开设置，填入 DeepSeek API Key 后再试。"
             return false
         }
+
         if current.messages.isEmpty {
-            current.title = String(trimmed.prefix(24))
+            current.title = Self.fallbackTitle(text: trimmed, attachments: attachments)
         }
-        current.messages.append(ChatMessage(role: .user, content: trimmed))
+
+        var userMessage = ChatMessage(role: .user, content: trimmed)
+        userMessage.attachments = attachments.isEmpty ? nil : attachments
+        let prompt = AttachmentService.promptBlock(for: attachments)
+        userMessage.attachmentPrompt = prompt.isEmpty ? nil : prompt
+        current.messages.append(userMessage)
         current.messages.append(ChatMessage(role: .assistant, content: ""))
         current.updatedAt = Date()
         conversation = current
@@ -61,7 +62,6 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
-    /// 删掉最后一条回答，用同样的上下文重新生成。
     func regenerate(settings: AppSettings) {
         guard !isStreaming, var current = conversation else { return }
         guard settings.hasAPIKey else {
@@ -79,6 +79,14 @@ final class ChatViewModel: ObservableObject {
         startStreaming(settings: settings)
     }
 
+    func deleteMessage(_ id: UUID) {
+        guard !isStreaming, var current = conversation else { return }
+        current.messages.removeAll { $0.id == id }
+        current.updatedAt = Date()
+        conversation = current
+        onConversationChanged?(current)
+    }
+
     func clearCurrentConversation() {
         guard var current = conversation else { return }
         streamGeneration += 1
@@ -92,20 +100,26 @@ final class ChatViewModel: ObservableObject {
         onConversationChanged?(current)
     }
 
+    /// 把当前会话（含流式中的内容）立刻同步给持久化层，App 进入后台前调用。
+    func flushToStore() {
+        guard let current = conversation else { return }
+        onConversationChanged?(current)
+    }
+
     // MARK: - 流式接收
 
     private func startStreaming(settings: AppSettings) {
         guard var current = conversation else { return }
 
-        let model = settings.resolvedModel.rawValue
+        let model = settings.model
         if current.model != model {
             current.model = model
             conversation = current
         }
 
-        let apiMessages = composeMessages(from: current.messages, systemPrompt: settings.systemPrompt)
+        let history = Array(current.messages.dropLast())
+        let options = ChatRequestOptions(settings: settings, model: model)
         let client = DeepSeekClient(apiKey: settings.apiKey, baseURL: settings.baseURL)
-        let temperature = settings.temperature
         let placeholderIndex = current.messages.count - 1
         streamGeneration += 1
         let generation = streamGeneration
@@ -116,14 +130,9 @@ final class ChatViewModel: ObservableObject {
 
         streamTask = Task { [weak self] in
             do {
-                for try await event in client.streamChat(model: model, messages: apiMessages, temperature: temperature) {
+                for try await event in client.streamChat(messages: history, options: options) {
                     guard let self else { return }
-                    switch event {
-                    case .reasoning(let chunk):
-                        self.append(chunk, asReasoning: true, at: placeholderIndex, generation: generation)
-                    case .content(let chunk):
-                        self.append(chunk, asReasoning: false, at: placeholderIndex, generation: generation)
-                    }
+                    self.apply(event, at: placeholderIndex)
                 }
                 self?.finishStreaming(generation: generation)
             } catch is CancellationError {
@@ -134,8 +143,64 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
-    private func append(_ chunk: String, asReasoning: Bool, at index: Int, generation: Int) {
-        guard generation == streamGeneration else { return }
+    private func apply(_ event: ChatStreamEvent, at index: Int) {
+        switch event {
+        case .reasoning(let chunk):
+            append(chunk, asReasoning: true, at: index)
+        case .content(let chunk):
+            append(chunk, asReasoning: false, at: index)
+        case .searchStarted(let queries, let kind):
+            guard var current = conversation, current.messages.indices.contains(index) else { return }
+            var existing = current.messages[index].searchQueries ?? []
+            for query in queries where !existing.contains(query) {
+                existing.append(query)
+            }
+            _ = kind
+            current.messages[index].searchQueries = existing.isEmpty ? nil : existing
+            conversation = current
+        case .searchCompleted(let sources):
+            guard var current = conversation, current.messages.indices.contains(index) else { return }
+            var existing = current.messages[index].sources ?? []
+            let known = Set(existing.map { $0.url })
+            for source in sources where !known.contains(source.url) {
+                existing.append(source)
+            }
+            current.messages[index].sources = existing.isEmpty ? nil : existing
+            conversation = current
+        case .final(let title, let citations, let serverToolJSON, let finishReason, let refusal):
+            applyFinal(title: title, citations: citations, serverToolJSON: serverToolJSON, finishReason: finishReason, refusal: refusal, at: index)
+        }
+    }
+
+    private func applyFinal(title: String?, citations: [Citation], serverToolJSON: String?, finishReason: String?, refusal: String?, at index: Int) {
+        guard var current = conversation, current.messages.indices.contains(index) else { return }
+        if let title, !title.isEmpty {
+            current.title = title
+        }
+        current.messages[index].citations = citations.isEmpty ? nil : citations
+        current.messages[index].serverToolJSON = serverToolJSON
+        current.messages[index].finishReason = finishReason
+        if let refusal, !refusal.isEmpty {
+            current.messages[index].refusalText = refusal
+        }
+        if finishReason == "content_filter" {
+            current.messages[index].content = ""
+            current.messages[index].reasoning = nil
+            if current.messages[index].refusalText == nil {
+                current.messages[index].refusalText = "内容被安全策略拦截，请换一种说法再试。"
+            }
+        }
+        if let raw = serverToolJSON, (current.messages[index].sources ?? []).isEmpty {
+            let parsed = DeepSeekClient.sources(fromServerToolJSON: raw)
+            if !parsed.isEmpty {
+                current.messages[index].sources = parsed
+            }
+        }
+        current.updatedAt = Date()
+        conversation = current
+    }
+
+    private func append(_ chunk: String, asReasoning: Bool, at index: Int) {
         guard var current = conversation, current.messages.indices.contains(index) else { return }
         if asReasoning {
             current.messages[index].reasoning = (current.messages[index].reasoning ?? "") + chunk
@@ -149,12 +214,6 @@ final class ChatViewModel: ObservableObject {
             persistedChunkCount = 0
             onConversationChanged?(current)
         }
-    }
-
-    /// 把当前会话（含流式中的内容）立刻同步给持久化层，App 进入后台前调用。
-    func flushToStore() {
-        guard let current = conversation else { return }
-        onConversationChanged?(current)
     }
 
     private func finishStreaming(generation: Int) {
@@ -197,9 +256,19 @@ final class ChatViewModel: ObservableObject {
               let last = current.messages.last,
               last.role == .assistant,
               last.content.isEmpty,
-              !last.hasReasoning else { return }
+              !last.hasReasoning,
+              last.refusalText == nil else { return }
         current.messages.removeLast()
         conversation = current
+    }
+
+    private static func fallbackTitle(text: String, attachments: [ChatAttachment]) -> String {
+        if !text.isEmpty {
+            return String(text.prefix(24))
+        }
+        let hasImage = attachments.contains { $0.kind == .image }
+        if hasImage { return "图片对话" }
+        return "文件对话"
     }
 
     private static func friendlyMessage(for error: Error) -> String {
@@ -219,28 +288,5 @@ final class ChatViewModel: ObservableObject {
             return localized
         }
         return error.localizedDescription
-    }
-
-    private func composeMessages(from messages: [ChatMessage], systemPrompt: String) -> [APIMessage] {
-        var result: [APIMessage] = []
-        let system = systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !system.isEmpty {
-            result.append(APIMessage(role: "system", content: system))
-        }
-        for message in messages {
-            switch message.role {
-            case .system:
-                continue
-            case .user:
-                if !message.content.isEmpty {
-                    result.append(APIMessage(role: "user", content: message.content))
-                }
-            case .assistant:
-                if !message.content.isEmpty {
-                    result.append(APIMessage(role: "assistant", content: message.content))
-                }
-            }
-        }
-        return result
     }
 }

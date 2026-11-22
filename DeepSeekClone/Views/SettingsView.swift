@@ -4,139 +4,43 @@ import Foundation
 struct SettingsView: View {
     @EnvironmentObject private var settingsStore: SettingsStore
     @EnvironmentObject private var conversationStore: ConversationStore
+    @EnvironmentObject private var catalog: ModelCatalog
     @Environment(\.dismiss) private var dismiss
 
-    @State private var apiKey = ""
-    @State private var baseURL = "https://api.deepseek.com"
-    @State private var model: DeepSeekModel = .chat
-    @State private var temperature = 1.0
-    @State private var systemPrompt = ""
+    @State private var draft = AppSettings()
+    @State private var loaded = false
     @State private var revealKey = false
     @State private var isTesting = false
     @State private var testMessage: String?
     @State private var testFailed = false
     @State private var confirmClear = false
+    @State private var isRefreshingModels = false
+
+    private var thinkingLocksSampling: Bool {
+        draft.thinkingEnabled || draft.webSearchEnabled || draft.safetyCheckEnabled || draft.autoTitleEnabled
+    }
 
     var body: some View {
         NavigationStack {
             Form {
-                Section {
-                    HStack(spacing: 8) {
-                        if revealKey {
-                            TextField("sk-...", text: $apiKey)
-                                .textInputAutocapitalization(.never)
-                                .autocorrectionDisabled()
-                        } else {
-                            SecureField("sk-...", text: $apiKey)
-                        }
-
-                        Button {
-                            revealKey.toggle()
-                        } label: {
-                            Image(systemName: revealKey ? "eye.slash" : "eye")
-                                .foregroundStyle(DSTheme.textSecondary)
-                        }
-                        .buttonStyle(.plain)
-                    }
-
-                    TextField("https://api.deepseek.com", text: $baseURL)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .keyboardType(.URL)
-
-                    Button {
-                        testConnection()
-                    } label: {
-                        HStack {
-                            Text(isTesting ? "正在测试…" : "测试连接")
-                            Spacer()
-                            if isTesting {
-                                ProgressView()
-                            }
-                        }
-                    }
-                    .disabled(isTesting || apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                } header: {
-                    Text("API 配置")
-                } footer: {
-                    VStack(alignment: .leading, spacing: 6) {
-                        if let testMessage {
-                            Text(testMessage)
-                                .foregroundStyle(testFailed ? .red : .green)
-                        }
-                        Text("API Key 只保存在本机钥匙串，不会上传到第三方服务器。可在 platform.deepseek.com 创建。")
-                    }
-                }
-
-                Section {
-                    Picker("默认模型", selection: $model) {
-                        ForEach(DeepSeekModel.allCases) { option in
-                            Text(option.title).tag(option)
-                        }
-                    }
-
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            Text("温度")
-                            Spacer()
-                            Text(String(format: "%.1f", temperature))
-                                .foregroundStyle(DSTheme.textSecondary)
-                        }
-                        Slider(value: $temperature, in: 0...2, step: 0.1)
-                    }
-
-                    Text(model.subtitle)
-                        .font(.system(size: 12))
-                        .foregroundStyle(DSTheme.textSecondary)
-                } header: {
-                    Text("模型")
-                }
-
-                Section {
-                    TextEditor(text: $systemPrompt)
-                        .frame(minHeight: 84)
-                } header: {
-                    Text("系统提示词（可选）")
-                } footer: {
-                    Text("会作为 system 消息加在每次请求最前面，用来固定回答风格。")
-                }
-
-                Section {
-                    Button(role: .destructive) {
-                        confirmClear = true
-                    } label: {
-                        Text("清空全部对话")
-                    }
-                } header: {
-                    Text("数据")
-                }
-
-                Section {
-                    HStack {
-                        Text("版本")
-                        Spacer()
-                        Text("1.0.0").foregroundStyle(DSTheme.textSecondary)
-                    }
-                    HStack {
-                        Text("说明")
-                        Spacer()
-                        Text("非官方客户端").foregroundStyle(DSTheme.textSecondary)
-                    }
-                } header: {
-                    Text("关于")
-                } footer: {
-                    Text("本项目是第三方学习示例，界面仅用于交流学习，与 DeepSeek 官方无关。")
-                }
+                apiSection
+                modelSection
+                thinkingSection
+                capabilitySection
+                generationSection
+                personalizationSection
+                dataSection
+                aboutSection
             }
             .navigationTitle("设置")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
-                }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") { save() }
-                        .fontWeight(.semibold)
+                    Button("完成") {
+                        save()
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
                 }
             }
             .alert("清空全部对话？", isPresented: $confirmClear) {
@@ -147,41 +51,293 @@ struct SettingsView: View {
             } message: {
                 Text("清空后无法恢复。API Key 与其它设置不会被删除。")
             }
-            .onAppear(perform: load)
+            .onAppear {
+                if !loaded {
+                    draft = settingsStore.settings
+                    loaded = true
+                }
+            }
+            .onDisappear { save() }
+            .task {
+                if catalog.options.isEmpty {
+                    await catalog.refresh(apiKey: draft.apiKey, baseURL: draft.baseURL)
+                }
+            }
         }
     }
 
-    private func load() {
-        let settings = settingsStore.settings
-        apiKey = settings.apiKey
-        baseURL = settings.baseURL
-        model = settings.resolvedModel
-        temperature = settings.temperature
-        systemPrompt = settings.systemPrompt
+    // MARK: - Sections
+
+    private var apiSection: some View {
+        Section {
+            HStack(spacing: 8) {
+                if revealKey {
+                    TextField("sk-...", text: $draft.apiKey)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                } else {
+                    SecureField("sk-...", text: $draft.apiKey)
+                }
+                Button {
+                    revealKey.toggle()
+                } label: {
+                    Image(systemName: revealKey ? "eye.slash" : "eye")
+                        .foregroundStyle(DSTheme.textSecondary)
+                }
+                .buttonStyle(.plain)
+            }
+
+            TextField("https://api.deepseek.com", text: $draft.baseURL)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .keyboardType(.URL)
+
+            Button {
+                testConnection()
+            } label: {
+                HStack {
+                    Text(isTesting ? "正在测试…" : "测试连接")
+                    Spacer()
+                    if isTesting {
+                        ProgressView()
+                    }
+                }
+            }
+            .disabled(isTesting || draft.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        } header: {
+            Text("API 配置")
+        } footer: {
+            VStack(alignment: .leading, spacing: 6) {
+                if let testMessage {
+                    Text(testMessage)
+                        .foregroundStyle(testFailed ? .red : .green)
+                }
+                Text("API Key 只保存在本机钥匙串，不会上传到第三方服务器。可在 platform.deepseek.com 创建。")
+            }
+        }
     }
 
+    private var modelSection: some View {
+        Section {
+            ForEach(catalog.options) { option in
+                Button {
+                    draft.model = option.id
+                    if let effort = option.defaultEffort {
+                        draft.reasoningEffort = effort
+                    }
+                } label: {
+                    HStack(alignment: .top, spacing: 10) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(option.shortName)
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(DSTheme.textPrimary)
+                            Text(option.capabilityText)
+                                .font(.system(size: 11))
+                                .foregroundStyle(DSTheme.textSecondary)
+                        }
+                        Spacer()
+                        if draft.model == option.id {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(DSTheme.accent)
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+
+            HStack {
+                Text("模型 ID")
+                Spacer()
+                TextField("deepseek-flash", text: $draft.model)
+                    .multilineTextAlignment(.trailing)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .font(.system(size: 13, design: .monospaced))
+                    .foregroundStyle(DSTheme.textSecondary)
+            }
+
+            Button {
+                refreshModels()
+            } label: {
+                HStack {
+                    Text("刷新模型列表")
+                    Spacer()
+                    if isRefreshingModels {
+                        ProgressView()
+                    } else if let updated = catalog.lastUpdated {
+                        Text(DSTheme.dateString(updated))
+                            .font(.system(size: 12))
+                            .foregroundStyle(DSTheme.textSecondary)
+                    }
+                }
+            }
+            .disabled(isRefreshingModels)
+        } header: {
+            Text("模型")
+        } footer: {
+            if let error = catalog.errorMessage {
+                Text(error).foregroundStyle(.red)
+            } else {
+                Text("列表来自 GET /models；只有 DeepSeek-V4.1-Flash 支持图片与联网工具。")
+            }
+        }
+    }
+
+    private var thinkingSection: some View {
+        Section {
+            Toggle("深度思考", isOn: $draft.thinkingEnabled)
+            if draft.thinkingEnabled {
+                Picker("思考强度", selection: $draft.reasoningEffort) {
+                    Text("低").tag("low")
+                    Text("高").tag("high")
+                    Text("极高").tag("max")
+                }
+                .pickerStyle(.segmented)
+            }
+        } header: {
+            Text("思考模式")
+        } footer: {
+            Text("思考模式下 temperature 不生效；强度越高越慢、越贵，但推理更充分。")
+        }
+    }
+
+    private var capabilitySection: some View {
+        Section {
+            Toggle("联网搜索", isOn: $draft.webSearchEnabled)
+            Toggle("阅读链接", isOn: $draft.readURLEnabled)
+        } header: {
+            Text("联网能力")
+        } footer: {
+            Text("由服务端执行检索与抓取；开启后 temperature 等采样参数由服务端决定。")
+        }
+    }
+
+    private var generationSection: some View {
+        Section {
+            Toggle("自动生成会话标题", isOn: $draft.autoTitleEnabled)
+            Toggle("内容安全校验", isOn: $draft.safetyCheckEnabled)
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("温度")
+                    Spacer()
+                    Text(String(format: "%.1f", draft.temperature))
+                        .foregroundStyle(DSTheme.textSecondary)
+                }
+                Slider(value: $draft.temperature, in: 0...2, step: 0.1)
+                    .disabled(thinkingLocksSampling)
+                if thinkingLocksSampling {
+                    Text("当前配置下服务端会忽略温度")
+                        .font(.system(size: 11))
+                        .foregroundStyle(DSTheme.textSecondary)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("上下文上限")
+                    Spacer()
+                    Text("\(draft.contextCharacterLimit / 1000)K 字")
+                        .foregroundStyle(DSTheme.textSecondary)
+                }
+                Slider(
+                    value: Binding(
+                        get: { Double(draft.contextCharacterLimit) },
+                        set: { draft.contextCharacterLimit = Int($0) }
+                    ),
+                    in: 20000...200000,
+                    step: 20000
+                )
+            }
+        } header: {
+            Text("生成")
+        }
+    }
+
+    private var personalizationSection: some View {
+        Section {
+            Picker("消息字号", selection: $draft.fontScale) {
+                Text("小").tag(0.9)
+                Text("标准").tag(1.0)
+                Text("大").tag(1.15)
+                Text("特大").tag(1.3)
+            }
+            .pickerStyle(.segmented)
+
+            TextEditor(text: $draft.systemPrompt)
+                .frame(minHeight: 88)
+        } header: {
+            Text("个性化")
+        } footer: {
+            Text("系统提示词会作为 system 消息加在每次请求最前面。")
+        }
+    }
+
+    private var dataSection: some View {
+        Section {
+            Button(role: .destructive) {
+                confirmClear = true
+            } label: {
+                Text("清空全部对话")
+            }
+        } header: {
+            Text("数据")
+        }
+    }
+
+    private var aboutSection: some View {
+        Section {
+            HStack {
+                Text("版本")
+                Spacer()
+                Text("1.2.0").foregroundStyle(DSTheme.textSecondary)
+            }
+            HStack {
+                Text("接口")
+                Spacer()
+                Text("DeepSeek Chat Completions").foregroundStyle(DSTheme.textSecondary)
+            }
+            HStack {
+                Text("说明")
+                Spacer()
+                Text("非官方客户端").foregroundStyle(DSTheme.textSecondary)
+            }
+        } header: {
+            Text("关于")
+        } footer: {
+            Text("本项目是第三方学习示例，与 DeepSeek 官方无关。API 费用由你自己的账号承担。")
+        }
+    }
+
+    // MARK: - Actions
+
     private func save() {
-        var updated = settingsStore.settings
-        updated.apiKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        let url = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        updated.baseURL = url.isEmpty ? "https://api.deepseek.com" : url
-        updated.model = model.rawValue
-        updated.temperature = temperature
-        updated.systemPrompt = systemPrompt
-        settingsStore.settings = updated
-        dismiss()
+        guard loaded else { return }
+        var value = draft
+        value.apiKey = value.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        let url = value.baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        value.baseURL = url.isEmpty ? "https://api.deepseek.com" : url
+        value.fontScale = min(max(value.fontScale, 0.8), 1.5)
+        settingsStore.settings = value
+    }
+
+    private func refreshModels() {
+        isRefreshingModels = true
+        Task { @MainActor in
+            await catalog.refresh(apiKey: draft.apiKey, baseURL: draft.baseURL)
+            isRefreshingModels = false
+        }
     }
 
     private func testConnection() {
-        let key = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        let key = draft.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         isTesting = true
         testMessage = nil
-        let client = DeepSeekClient(apiKey: key, baseURL: baseURL)
-
+        let client = DeepSeekClient(apiKey: key, baseURL: draft.baseURL)
+        let modelID = draft.model
         Task { @MainActor in
             do {
-                // 连接测试固定用 V3：快、便宜
-                let message = try await client.testConnection(model: DeepSeekModel.chat.rawValue)
+                let message = try await client.testConnection(model: modelID)
                 testMessage = message
                 testFailed = false
             } catch {

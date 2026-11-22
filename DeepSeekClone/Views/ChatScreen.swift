@@ -3,24 +3,32 @@ import UIKit
 
 struct ChatScreen: View {
     @ObservedObject var chat: ChatViewModel
-    let settings: AppSettings
+    @EnvironmentObject private var settingsStore: SettingsStore
+    @EnvironmentObject private var modelCatalog: ModelCatalog
 
     var onMenu: () -> Void
     var onNewChat: () -> Void
     var onOpenSettings: () -> Void
-    var onSelectModel: (DeepSeekModel) -> Void
-    var onClear: () -> Void
+    var onToast: (String) -> Void
 
     @State private var draft = ""
+    @State private var attachments: [ChatAttachment] = []
+    @State private var showModelSheet = false
     @FocusState private var isInputFocused: Bool
 
     private let bottomID = "chat-bottom"
 
     private var conversation: Conversation? { chat.conversation }
+    private var settings: AppSettings { settingsStore.settings }
+    private var modelOption: ModelOption? { modelCatalog.option(for: settings.model) }
+    private var modelName: String { modelOption?.shortName ?? settings.resolvedModel.title }
 
     var body: some View {
         VStack(spacing: 0) {
             topBar
+            if !settings.hasAPIKey {
+                apiKeyBanner
+            }
             messageList
         }
         .background(DSTheme.background.ignoresSafeArea())
@@ -28,23 +36,29 @@ struct ChatScreen: View {
             ComposerBar(
                 text: $draft,
                 isFocused: $isInputFocused,
+                attachments: $attachments,
                 isStreaming: chat.isStreaming,
-                model: settings.resolvedModel,
+                modelOption: modelOption,
+                settings: settings,
                 onSend: sendDraft,
                 onStop: { chat.stop() },
-                onSelectModel: onSelectModel,
+                onSelectModel: { showModelSheet = true },
+                onToggleThinking: toggleThinking,
+                onToggleWebSearch: toggleWebSearch,
                 onNewChat: onNewChat,
-                onClear: onClear,
-                onOpenSettings: onOpenSettings
+                onClear: { chat.clearCurrentConversation() },
+                onOpenSettings: onOpenSettings,
+                onToast: onToast
             )
         }
+        .sheet(isPresented: $showModelSheet) {
+            ModelPickerSheet()
+                .environmentObject(settingsStore)
+                .environmentObject(modelCatalog)
+        }
         .alert("请求失败", isPresented: errorBinding) {
-            Button("重试") {
-                chat.regenerate(settings: settings)
-            }
-            Button("好", role: .cancel) {
-                chat.errorMessage = nil
-            }
+            Button("重试") { chat.regenerate(settings: settings) }
+            Button("好", role: .cancel) { chat.errorMessage = nil }
         } message: {
             Text(chat.errorMessage ?? "")
         }
@@ -69,15 +83,14 @@ struct ChatScreen: View {
                 Text("DeepSeek")
                     .font(.system(size: 17, weight: .semibold, design: .rounded))
                     .foregroundStyle(DSTheme.textPrimary)
-                Text(settings.resolvedModel.title)
+                Text(modelName)
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(DSTheme.textSecondary)
             }
 
             Spacer(minLength: 0)
 
-            iconButton("square.and.pencil", action: onNewChat)
-            iconButton("gearshape", action: onOpenSettings)
+            iconButton("plus", action: onNewChat)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
@@ -87,6 +100,25 @@ struct ChatScreen: View {
                 .fill(DSTheme.hairline.opacity(0.25))
                 .frame(height: 0.5)
         }
+    }
+
+    private var apiKeyBanner: some View {
+        Button(action: onOpenSettings) {
+            HStack(spacing: 8) {
+                Image(systemName: "key.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                Text("还没配置 API Key，点这里填写后开始对话")
+                    .font(.system(size: 13, weight: .medium))
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+            }
+            .foregroundStyle(DSTheme.accent)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(DSTheme.accent.opacity(0.09))
+        }
+        .buttonStyle(.plain)
     }
 
     private func iconButton(_ systemName: String, action: @escaping () -> Void) -> some View {
@@ -110,7 +142,12 @@ struct ChatScreen: View {
                                 message: message,
                                 isStreaming: chat.isStreaming && index == conversation.messages.count - 1,
                                 isLastAssistant: isLastAssistantMessage(at: index, in: conversation),
-                                onCopy: { UIPasteboard.general.string = message.content },
+                                fontScale: CGFloat(settings.fontScale),
+                                onCopy: {
+                                    UIPasteboard.general.string = message.content
+                                    onToast("已复制")
+                                },
+                                onDelete: { chat.deleteMessage(message.id) },
                                 onRegenerate: { chat.regenerate(settings: settings) }
                             )
                         }
@@ -139,6 +176,10 @@ struct ChatScreen: View {
             .onChange(of: isInputFocused) { focused in
                 if focused { scrollToBottom(proxy) }
             }
+            .onChange(of: conversation?.id) { _ in
+                attachments = []
+                scrollToBottom(proxy)
+            }
         }
     }
 
@@ -160,8 +201,27 @@ struct ChatScreen: View {
     }
 
     private func sendDraft() {
-        if chat.send(draft, settings: settings) {
+        if chat.send(draft, attachments: attachments, settings: settings) {
             draft = ""
+            attachments = []
         }
+    }
+
+    private func toggleThinking() {
+        var updated = settingsStore.settings
+        updated.thinkingEnabled.toggle()
+        settingsStore.settings = updated
+    }
+
+    private func toggleWebSearch() {
+        var updated = settingsStore.settings
+        updated.webSearchEnabled.toggle()
+        if updated.webSearchEnabled {
+            if let option = modelCatalog.option(for: updated.model), !option.supportsImages && option.id.contains("v4-pro") {
+                onToast("V4-Pro 不支持联网搜索，已切到 V4.1-Flash")
+                updated.model = "deepseek-flash"
+            }
+        }
+        settingsStore.settings = updated
     }
 }

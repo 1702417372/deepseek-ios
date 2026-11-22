@@ -1,0 +1,68 @@
+name: Simulator Screenshots
+
+# 在免费的 macOS runner 上启动 iOS 模拟器，安装 App 并按不同界面截图，作为 UI 预览产物。
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "DeepSeekClone/**"
+      - ".github/workflows/screenshots.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  screenshots:
+    name: Capture iOS screenshots
+    runs-on: macos-15
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build for simulator
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project DeepSeekClone.xcodeproj \
+            -scheme DeepSeekClone \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Boot iPhone simulator
+        run: |
+          set -euo pipefail
+          DEVICE_UDID=$(xcrun simctl list devices available | grep -m1 -E "iPhone 16 Pro|iPhone 16" | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')
+          echo "device: $DEVICE_UDID"
+          echo "DEVICE_UDID=$DEVICE_UDID" >> "$GITHUB_ENV"
+          xcrun simctl boot "$DEVICE_UDID" || true
+          xcrun simctl bootstatus "$DEVICE_UDID" -b
+          xcrun simctl status_bar "$DEVICE_UDID" override \
+            --time "9:41" --batteryState charged --batteryLevel 100 \
+            --wifiBars 3 --cellularBars 4 || true
+
+      - name: Install and capture
+        run: |
+          set -euo pipefail
+          APP="build/Build/Products/Debug-iphonesimulator/DeepSeekClone.app"
+          xcrun simctl install "$DEVICE_UDID" "$APP"
+          for SCREEN in home chat drawer settings; do
+            echo "---- $SCREEN ----"
+            xcrun simctl terminate "$DEVICE_UDID" com.example.deepseekclone >/dev/null 2>&1 || true
+            xcrun simctl launch "$DEVICE_UDID" com.example.deepseekclone --demo-screen="$SCREEN"
+            sleep 8
+            xcrun simctl io "$DEVICE_UDID" screenshot "shot-$SCREEN.png"
+          done
+          ls -lh shot-*.png
+
+      - name: Upload screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-screenshots
+          path: shot-*.png
+          if-no-files-found: error
+          retention-days: 30

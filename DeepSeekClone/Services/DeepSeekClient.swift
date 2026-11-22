@@ -6,70 +6,81 @@ struct DeepSeekError: LocalizedError {
     var errorDescription: String? { message }
 }
 
-/// 发给接口的一条消息（OpenAI 兼容格式）。
-struct APIMessage: Encodable {
-    let role: String
-    let content: String
-}
+/// 一次请求用到的全部参数。
+struct ChatRequestOptions {
+    var model: String
+    var thinkingEnabled: Bool
+    var reasoningEffort: String
+    var webSearchEnabled: Bool
+    var readURLEnabled: Bool
+    var autoTitleEnabled: Bool
+    var safetyCheckEnabled: Bool
+    var temperature: Double
+    var systemPrompt: String
+    var contextCharacterLimit: Int
 
-private struct ChatCompletionRequest: Encodable {
-    let model: String
-    let messages: [APIMessage]
-    let stream: Bool
-    let temperature: Double
-}
-
-private struct StreamDelta: Decodable {
-    let content: String?
-    let reasoningContent: String?
-}
-
-private struct StreamChunk: Decodable {
-    struct Choice: Decodable {
-        let delta: StreamDelta?
+    init(settings: AppSettings, model: String? = nil) {
+        self.model = model ?? settings.model
+        self.thinkingEnabled = settings.thinkingEnabled
+        self.reasoningEffort = settings.reasoningEffort
+        self.webSearchEnabled = settings.webSearchEnabled
+        self.readURLEnabled = settings.readURLEnabled
+        self.autoTitleEnabled = settings.autoTitleEnabled
+        self.safetyCheckEnabled = settings.safetyCheckEnabled
+        self.temperature = settings.temperature
+        self.systemPrompt = settings.systemPrompt
+        self.contextCharacterLimit = max(4000, settings.contextCharacterLimit)
     }
-    let choices: [Choice]
 }
 
 enum ChatStreamEvent {
     case reasoning(String)
     case content(String)
+    case searchStarted(queries: [String], kind: String)
+    case searchCompleted(sources: [SearchSource])
+    case final(title: String?, citations: [Citation], serverToolJSON: String?, finishReason: String?, refusal: String?)
 }
 
-/// DeepSeek OpenAI 兼容接口客户端，支持 SSE 流式输出，可中断。
+/// DeepSeek 2026 版 Chat Completions 客户端：思考模式、联网工具、图片/文件输入、会话标题。
 final class DeepSeekClient {
     private let apiKey: String
     private let baseURL: String
     private let session: URLSession
-
-    /// JSONDecoder 不是线程安全的，每个流各自创建一个。
-    private static func makeDecoder() -> JSONDecoder {
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        return decoder
-    }
 
     init(apiKey: String, baseURL: String) {
         self.apiKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         self.baseURL = baseURL
         let configuration = URLSessionConfiguration.default
         configuration.timeoutIntervalForRequest = 120
-        configuration.timeoutIntervalForResource = 600
+        configuration.timeoutIntervalForResource = 900
         configuration.waitsForConnectivity = true
         self.session = URLSession(configuration: configuration)
     }
 
-    /// 兼容 https://api.deepseek.com、结尾带斜杠、以及已带 /v1 或 /chat/completions 的写法。
-    func chatCompletionsURL() -> URL? {
+    // MARK: - URL
+
+    private func trimmedBase() -> String {
         var base = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
         if base.isEmpty { base = "https://api.deepseek.com" }
         while base.hasSuffix("/") { base.removeLast() }
-        if base.hasSuffix("/chat/completions") { return URL(string: base) }
-        return URL(string: base + "/chat/completions")
+        if base.hasSuffix("/chat/completions") {
+            base = String(base.dropLast("/chat/completions".count))
+        }
+        return base
     }
 
-    private func makeRequest(model: String, messages: [APIMessage], temperature: Double, stream: Bool) throws -> URLRequest {
-        guard let url = chatCompletionsURL(), url.scheme?.lowercased() == "https" else {
+    func chatCompletionsURL() -> URL? {
+        URL(string: trimmedBase() + "/chat/completions")
+    }
+
+    private func filesURL() -> URL? {
+        URL(string: trimmedBase() + "/files")
+    }
+
+    // MARK: - 请求构造
+
+    private func makeJSONRequest(url: URL, body: [String: Any]) throws -> URLRequest {
+        guard url.scheme?.lowercased() == "https" else {
             throw DeepSeekError(message: "Base URL 必须是 https:// 开头的地址（iOS 的 ATS 会拦截 http 明文请求）。")
         }
         guard !apiKey.isEmpty else {
@@ -78,20 +89,117 @@ final class DeepSeekClient {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        request.setValue("DeepSeekClone/1.0 (iOS)", forHTTPHeaderField: "User-Agent")
-        let body = ChatCompletionRequest(model: model, messages: messages, stream: stream, temperature: temperature)
-        request.httpBody = try JSONEncoder().encode(body)
+        request.setValue("DeepSeekClone/1.2 (iOS)", forHTTPHeaderField: "User-Agent")
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
         return request
     }
 
-    /// 流式对话：逐段产出思维链与正文。
-    func streamChat(model: String, messages: [APIMessage], temperature: Double) -> AsyncThrowingStream<ChatStreamEvent, Error> {
+    private func buildMessages(_ messages: [ChatMessage], options: ChatRequestOptions) -> [[String: Any]] {
+        var result: [[String: Any]] = []
+        let system = options.systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !system.isEmpty {
+            result.append(["role": "system", "content": system])
+        }
+
+        // 按字符上限裁剪历史，保留最近的消息
+        var selected: [ChatMessage] = []
+        var total = 0
+        for message in messages.reversed() {
+            let cost = message.content.count + (message.reasoning?.count ?? 0) + (message.attachmentPrompt?.count ?? 0) + 240
+            if !selected.isEmpty && total + cost > options.contextCharacterLimit { break }
+            total += cost
+            selected.insert(message, at: 0)
+        }
+
+        for message in selected {
+            switch message.role {
+            case .system:
+                continue
+            case .user:
+                var userContent = message.content
+                if let extra = message.attachmentPrompt, !extra.isEmpty {
+                    userContent += "\n\n" + extra
+                }
+                var parts: [[String: Any]] = []
+                if !userContent.isEmpty {
+                    parts.append(["type": "text", "text": userContent])
+                }
+                let attachments = message.attachments ?? []
+                var needsArray = false
+                for attachment in attachments {
+                    if attachment.kind == .image, let base64 = attachment.imageBase64JPEG {
+                        needsArray = true
+                        parts.append([
+                            "type": "image_url",
+                            "image_url": ["url": "data:image/jpeg;base64," + base64, "detail": "auto"]
+                        ])
+                    } else if attachment.kind == .document, let fileID = attachment.fileID {
+                        needsArray = true
+                        parts.append(["type": "file", "file_id": fileID])
+                    }
+                }
+                if needsArray {
+                    result.append(["role": "user", "content": parts])
+                } else if let text = parts.first?["text"] as? String {
+                    result.append(["role": "user", "content": text])
+                }
+            case .assistant:
+                if message.isRefused { continue }
+                guard !message.content.isEmpty else { continue }
+                var dictionary: [String: Any] = ["role": "assistant", "content": message.content]
+                if options.webSearchEnabled || options.readURLEnabled {
+                    if let reasoning = message.reasoning, !reasoning.isEmpty {
+                        dictionary["reasoning_content"] = reasoning
+                    }
+                    if let raw = message.serverToolJSON,
+                       let data = raw.data(using: .utf8),
+                       let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                        if let calls = parsed["server_tool_calls"] { dictionary["server_tool_calls"] = calls }
+                        if let annotations = parsed["annotations"] { dictionary["annotations"] = annotations }
+                    }
+                }
+                result.append(dictionary)
+            }
+        }
+        return result
+    }
+
+    private func buildBody(messages: [ChatMessage], options: ChatRequestOptions) -> [String: Any] {
+        var body: [String: Any] = [
+            "model": options.model,
+            "messages": buildMessages(messages, options: options),
+            "stream": true,
+            "stream_options": ["include_usage": true]
+        ]
+
+        body["thinking"] = ["type": options.thinkingEnabled ? "enabled" : "disabled"]
+        if options.thinkingEnabled {
+            body["reasoning_effort"] = options.reasoningEffort
+        } else {
+            body["temperature"] = min(max(options.temperature, 0), 2)
+        }
+
+        var tools: [[String: Any]] = []
+        if options.webSearchEnabled { tools.append(["type": "deepseek_web_search"]) }
+        if options.readURLEnabled { tools.append(["type": "deepseek_read_url"]) }
+        if !tools.isEmpty { body["tools"] = tools }
+        if options.safetyCheckEnabled { body["safety_check"] = ["level": "high"] }
+        if options.autoTitleEnabled { body["title"] = ["enabled": true] }
+        return body
+    }
+
+    // MARK: - 流式对话
+
+    func streamChat(messages: [ChatMessage], options: ChatRequestOptions) -> AsyncThrowingStream<ChatStreamEvent, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
-                    let decoder = DeepSeekClient.makeDecoder()
-                    let request = try makeRequest(model: model, messages: messages, temperature: temperature, stream: true)
+                    guard let url = chatCompletionsURL() else {
+                        throw DeepSeekError(message: "接口地址不可用，请检查 Base URL。")
+                    }
+                    let request = try makeJSONRequest(url: url, body: buildBody(messages: messages, options: options))
                     let (bytes, response) = try await session.bytes(for: request)
                     guard let http = response as? HTTPURLResponse else {
                         throw DeepSeekError(message: "服务端返回了无法识别的响应。")
@@ -103,70 +211,276 @@ final class DeepSeekClient {
                                 raw += line + " "
                                 if raw.count > 4000 { break }
                             }
-                        } catch {
-                            // 读错误内容失败时忽略，用状态码兜底
-                        }
+                        } catch {}
                         throw DeepSeekError(message: DeepSeekClient.errorMessage(status: http.statusCode, body: raw))
                     }
 
+                    let decoder = DeepSeekClient.makeDecoder()
+                    var title: String?
+                    var citations: [Citation] = []
+                    var serverToolJSON: String?
+                    var finishReason: String?
+                    var refusal: String?
+
                     for try await line in bytes.lines {
                         if Task.isCancelled { break }
-                        guard let event = DeepSeekClient.parse(line: line, decoder: decoder) else { continue }
-                        switch event {
-                        case .finished:
-                            continuation.finish()
-                            return
-                        case .delta(let delta):
+                        guard line.hasPrefix("data:") else { continue }
+                        let payload = line.dropFirst(5).trimmingCharacters(in: .whitespaces)
+                        if payload.isEmpty { continue }
+                        if payload == "[DONE]" { break }
+                        guard let data = payload.data(using: .utf8),
+                              let chunk = try? decoder.decode(StreamChunk.self, from: data) else { continue }
+
+                        if let error = chunk.error {
+                            throw DeepSeekError(message: error.message ?? "服务端返回错误")
+                        }
+                        guard let choice = chunk.choices.first else { continue }
+
+                        if let event = choice.serverToolEvent {
+                            Self.emitToolEvent(event, to: continuation)
+                        }
+
+                        if let delta = choice.delta {
                             if let reasoning = delta.reasoningContent, !reasoning.isEmpty {
                                 continuation.yield(.reasoning(reasoning))
                             }
                             if let content = delta.content, !content.isEmpty {
                                 continuation.yield(.content(content))
                             }
+                            if let chunkTitle = delta.title, !chunkTitle.isEmpty { title = chunkTitle }
+                            if let chunkRefusal = delta.refusal, !chunkRefusal.isEmpty { refusal = chunkRefusal }
+                            if let annotations = delta.annotations, !annotations.isEmpty {
+                                citations = Self.citations(from: annotations)
+                            }
+                            if let calls = delta.serverToolCalls, !calls.isEmpty {
+                                let payloadJSON: [String: Any] = [
+                                    "server_tool_calls": calls.map { $0.anyValue },
+                                    "annotations": (delta.annotations ?? []).map { $0.anyValue }
+                                ]
+                                serverToolJSON = JSONValue.serializedJSONString(payloadJSON)
+                            }
+                        }
+                        if let reason = choice.finishReason {
+                            finishReason = reason
                         }
                     }
+
+                    continuation.yield(.final(
+                        title: title,
+                        citations: citations,
+                        serverToolJSON: serverToolJSON,
+                        finishReason: finishReason,
+                        refusal: refusal
+                    ))
                     continuation.finish()
                 } catch {
                     continuation.finish(throwing: error)
                 }
             }
-            continuation.onTermination = { _ in
-                task.cancel()
-            }
+            continuation.onTermination = { _ in task.cancel() }
         }
     }
 
-    /// 设置页的连通性测试（非流式，消耗极少 token）。
+    private static func emitToolEvent(_ event: ServerToolEvent, to continuation: AsyncThrowingStream<ChatStreamEvent, Error>.Continuation) {
+        switch event.type {
+        case "call_started":
+            let queries = event.call?.action?.queries ?? []
+            let kind = event.call?.kind ?? ""
+            continuation.yield(.searchStarted(queries: queries, kind: kind))
+        case "call_completed":
+            let sources = (event.call?.sources ?? []).compactMap { payload -> SearchSource? in
+                guard let url = payload.url, !url.isEmpty else { return nil }
+                return SearchSource(
+                    url: url,
+                    title: payload.title ?? url,
+                    snippet: payload.snippet,
+                    siteName: payload.siteName,
+                    publishedAt: payload.publishedAt
+                )
+            }
+            if !sources.isEmpty {
+                continuation.yield(.searchCompleted(sources: sources))
+            }
+        default:
+            break
+        }
+    }
+
+    static func citations(from annotations: [JSONValue]) -> [Citation] {
+        var result: [Citation] = []
+        for annotation in annotations {
+            guard case .object(let dictionary) = annotation,
+                  case .object(let citation)? = dictionary["url_citation"] else { continue }
+            var url = ""
+            var title = ""
+            if case .string(let value)? = citation["url"] { url = value }
+            if case .string(let value)? = citation["title"] { title = value }
+            if !url.isEmpty {
+                result.append(Citation(url: url, title: title.isEmpty ? url : title))
+            }
+        }
+        return result
+    }
+
+    /// 从最终的 server_tool_calls JSON 里再兜底提取一次来源（有些搜索只出现在最后一个 chunk）。
+    static func sources(fromServerToolJSON raw: String) -> [SearchSource] {
+        guard let data = raw.data(using: .utf8),
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let steps = root["server_tool_calls"] as? [[String: Any]] else { return [] }
+        var result: [SearchSource] = []
+        var seen = Set<String>()
+        for step in steps {
+            guard let calls = step["calls"] as? [[String: Any]] else { continue }
+            for call in calls {
+                if let pages = call["sources"] as? [[String: Any]] {
+                    for page in pages {
+                        guard let url = page["url"] as? String, !url.isEmpty, !seen.contains(url) else { continue }
+                        seen.insert(url)
+                        result.append(SearchSource(
+                            url: url,
+                            title: (page["title"] as? String) ?? url,
+                            snippet: page["snippet"] as? String,
+                            siteName: page["site_name"] as? String ?? page["siteName"] as? String,
+                            publishedAt: page["published_at"] as? String ?? page["publishedAt"] as? String
+                        ))
+                    }
+                }
+                if let callsPage = call["page"] as? [String: Any], let url = callsPage["url"] as? String {
+                    if !seen.contains(url) {
+                        seen.insert(url)
+                        result.append(SearchSource(url: url, title: (callsPage["title"] as? String) ?? url, snippet: nil, siteName: nil, publishedAt: callsPage["published_at"] as? String))
+                    }
+                }
+            }
+        }
+        return result
+    }
+
+    // MARK: - 文件上传（Files API）
+
+    static func uploadFile(data: Data, filename: String, purpose: String, apiKey: String, baseURL: String) async throws -> String {
+        var base = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        if base.isEmpty { base = "https://api.deepseek.com" }
+        while base.hasSuffix("/") { base.removeLast() }
+        if base.hasSuffix("/chat/completions") { base = String(base.dropLast("/chat/completions".count)) }
+        guard let url = URL(string: base + "/files"), url.scheme?.lowercased() == "https" else {
+            throw DeepSeekError(message: "文件上传地址不可用，请检查 Base URL。")
+        }
+        let boundary = "DeepSeekCloneBoundary-" + UUID().uuidString
+        var body = Data()
+        func append(_ text: String) { body.append(Data(text.utf8)) }
+        append("--\(boundary)\r\n")
+        append("Content-Disposition: form-data; name=\"purpose\"\r\n\r\n")
+        append(purpose + "\r\n")
+        append("--\(boundary)\r\n")
+        append("Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n")
+        append("Content-Type: application/octet-stream\r\n\r\n")
+        body.append(data)
+        append("\r\n--\(boundary)--\r\n")
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 300
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("DeepSeekClone/1.2 (iOS)", forHTTPHeaderField: "User-Agent")
+        request.httpBody = body
+
+        let (responseData, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw DeepSeekError(message: "文件上传失败：响应异常")
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            throw DeepSeekError(message: errorMessage(status: http.statusCode, body: String(data: responseData, encoding: .utf8) ?? ""))
+        }
+        guard let json = try? JSONSerialization.jsonObject(with: responseData) as? [String: Any],
+              let fileID = json["id"] as? String else {
+            throw DeepSeekError(message: "文件上传失败：没有拿到 file_id")
+        }
+        return fileID
+    }
+
+    // MARK: - 连接测试
+
     func testConnection(model: String) async throws -> String {
-        let messages: [APIMessage] = [APIMessage(role: "user", content: "ping")]
-        let request = try makeRequest(model: model, messages: messages, temperature: 1.0, stream: false)
+        guard let url = chatCompletionsURL() else {
+            throw DeepSeekError(message: "接口地址不可用，请检查 Base URL。")
+        }
+        let body: [String: Any] = [
+            "model": model,
+            "messages": [["role": "user", "content": "ping"]],
+            "thinking": ["type": "disabled"],
+            "stream": false,
+            "max_tokens": 8
+        ]
+        let request = try makeJSONRequest(url: url, body: body)
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw DeepSeekError(message: "服务端返回了无法识别的响应。")
         }
         guard (200..<300).contains(http.statusCode) else {
-            let body = String(data: data, encoding: .utf8) ?? ""
-            throw DeepSeekError(message: DeepSeekClient.errorMessage(status: http.statusCode, body: body))
+            throw DeepSeekError(message: DeepSeekClient.errorMessage(status: http.statusCode, body: String(data: data, encoding: .utf8) ?? ""))
         }
-        return "连接成功，模型可用 ✅"
+        return "连接成功，模型 \(model) 可用 ✅"
     }
 
-    private enum ParsedLine {
-        case delta(StreamDelta)
-        case finished
+    // MARK: - 解码
+
+    private static func makeDecoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        return decoder
     }
 
-    private static func parse(line: String, decoder: JSONDecoder) -> ParsedLine? {
-        guard line.hasPrefix("data:") else { return nil }
-        let payload = line.dropFirst(5).trimmingCharacters(in: .whitespaces)
-        if payload.isEmpty { return nil }
-        if payload == "[DONE]" { return .finished }
-        guard let data = payload.data(using: .utf8),
-              let chunk = try? decoder.decode(StreamChunk.self, from: data),
-              let delta = chunk.choices.first?.delta else {
-            return nil
+    struct APIError: Decodable {
+        let message: String?
+        let type: String?
+        let code: String?
+    }
+
+    struct StreamChunk: Decodable {
+        struct Choice: Decodable {
+            let delta: Delta?
+            let serverToolEvent: ServerToolEvent?
+            let finishReason: String?
         }
-        return .delta(delta)
+        struct Delta: Decodable {
+            let content: String?
+            let reasoningContent: String?
+            let annotations: [JSONValue]?
+            let serverToolCalls: [JSONValue]?
+            let title: String?
+            let refusal: String?
+        }
+        let choices: [Choice]
+        let error: APIError?
+    }
+
+    struct ServerToolEvent: Decodable {
+        struct ToolCall: Decodable {
+            struct Action: Decodable {
+                let type: String?
+                let queries: [String]?
+                let url: String?
+            }
+            struct SourcePayload: Decodable {
+                let url: String?
+                let title: String?
+                let snippet: String?
+                let siteName: String?
+                let publishedAt: String?
+            }
+            let index: Int?
+            let id: String?
+            let type: String?
+            let kind: String?
+            let action: Action?
+            let status: String?
+            let sources: [SourcePayload]?
+        }
+        let type: String
+        let step: Int?
+        let call: ToolCall?
     }
 
     static func errorMessage(status: Int, body: String) -> String {

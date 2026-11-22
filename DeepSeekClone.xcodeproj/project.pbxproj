@@ -9,21 +9,31 @@
 /* Begin PBXBuildFile section */
 		A00000000000000000000001 /* DeepSeekCloneApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000001 /* DeepSeekCloneApp.swift */; };
 		A00000000000000000000002 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000002 /* Theme.swift */; };
-		A00000000000000000000003 /* ChatModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000003 /* ChatModels.swift */; };
-		A00000000000000000000004 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000004 /* AppSettings.swift */; };
-		A00000000000000000000005 /* DeepSeekClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000005 /* DeepSeekClient.swift */; };
-		A00000000000000000000006 /* ConversationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000006 /* ConversationStore.swift */; };
-		A00000000000000000000007 /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000007 /* SettingsStore.swift */; };
-		A00000000000000000000008 /* KeychainHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000008 /* KeychainHelper.swift */; };
-		A00000000000000000000009 /* ChatViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000009 /* ChatViewModel.swift */; };
-		A0000000000000000000000A /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000000A /* RootView.swift */; };
-		A0000000000000000000000B /* ChatScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000000B /* ChatScreen.swift */; };
-		A0000000000000000000000C /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000000C /* SidebarView.swift */; };
-		A0000000000000000000000D /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000000D /* SettingsView.swift */; };
-		A0000000000000000000000E /* MessageRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000000E /* MessageRow.swift */; };
-		A0000000000000000000000F /* MarkdownText.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000000F /* MarkdownText.swift */; };
-		A00000000000000000000010 /* ComposerBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000010 /* ComposerBar.swift */; };
-		A00000000000000000000011 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000011 /* WelcomeView.swift */; };
+		A00000000000000000000003 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000003 /* AppSettings.swift */; };
+		A00000000000000000000004 /* Attachment.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000004 /* Attachment.swift */; };
+		A00000000000000000000005 /* ChatModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000005 /* ChatModels.swift */; };
+		A00000000000000000000006 /* JSONValue.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000006 /* JSONValue.swift */; };
+		A00000000000000000000007 /* AttachmentService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000007 /* AttachmentService.swift */; };
+		A00000000000000000000008 /* ConversationExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000008 /* ConversationExporter.swift */; };
+		A00000000000000000000009 /* ConversationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000009 /* ConversationStore.swift */; };
+		A0000000000000000000000A /* DeepSeekClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000000A /* DeepSeekClient.swift */; };
+		A0000000000000000000000B /* KeychainHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000000B /* KeychainHelper.swift */; };
+		A0000000000000000000000C /* ModelCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000000C /* ModelCatalog.swift */; };
+		A0000000000000000000000D /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000000D /* SettingsStore.swift */; };
+		A0000000000000000000000E /* DemoSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000000E /* DemoSupport.swift */; };
+		A0000000000000000000000F /* ChatViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000000F /* ChatViewModel.swift */; };
+		A00000000000000000000010 /* ChatScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000010 /* ChatScreen.swift */; };
+		A00000000000000000000011 /* ComposerBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000011 /* ComposerBar.swift */; };
+		A00000000000000000000012 /* MarkdownText.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000012 /* MarkdownText.swift */; };
+		A00000000000000000000013 /* MessageRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000013 /* MessageRow.swift */; };
+		A00000000000000000000014 /* ModelPickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000014 /* ModelPickerSheet.swift */; };
+		A00000000000000000000015 /* RenameSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000015 /* RenameSheet.swift */; };
+		A00000000000000000000016 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000016 /* RootView.swift */; };
+		A00000000000000000000017 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000017 /* SettingsView.swift */; };
+		A00000000000000000000018 /* ShareSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000018 /* ShareSheet.swift */; };
+		A00000000000000000000019 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000019 /* SidebarView.swift */; };
+		A0000000000000000000001A /* ToastCenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000001A /* ToastCenter.swift */; };
+		A0000000000000000000001B /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000001B /* WelcomeView.swift */; };
 		A000000000000000000001F4 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B000000000000000000001F4 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
@@ -32,21 +42,31 @@
 		B000000000000000000001F4 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B00000000000000000000001 /* DeepSeekCloneApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepSeekCloneApp.swift; sourceTree = "<group>"; };
 		B00000000000000000000002 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
-		B00000000000000000000003 /* ChatModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatModels.swift; sourceTree = "<group>"; };
-		B00000000000000000000004 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
-		B00000000000000000000005 /* DeepSeekClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepSeekClient.swift; sourceTree = "<group>"; };
-		B00000000000000000000006 /* ConversationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationStore.swift; sourceTree = "<group>"; };
-		B00000000000000000000007 /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
-		B00000000000000000000008 /* KeychainHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainHelper.swift; sourceTree = "<group>"; };
-		B00000000000000000000009 /* ChatViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatViewModel.swift; sourceTree = "<group>"; };
-		B0000000000000000000000A /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
-		B0000000000000000000000B /* ChatScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatScreen.swift; sourceTree = "<group>"; };
-		B0000000000000000000000C /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
-		B0000000000000000000000D /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
-		B0000000000000000000000E /* MessageRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageRow.swift; sourceTree = "<group>"; };
-		B0000000000000000000000F /* MarkdownText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownText.swift; sourceTree = "<group>"; };
-		B00000000000000000000010 /* ComposerBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerBar.swift; sourceTree = "<group>"; };
-		B00000000000000000000011 /* WelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeView.swift; sourceTree = "<group>"; };
+		B00000000000000000000003 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
+		B00000000000000000000004 /* Attachment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Attachment.swift; sourceTree = "<group>"; };
+		B00000000000000000000005 /* ChatModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatModels.swift; sourceTree = "<group>"; };
+		B00000000000000000000006 /* JSONValue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSONValue.swift; sourceTree = "<group>"; };
+		B00000000000000000000007 /* AttachmentService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttachmentService.swift; sourceTree = "<group>"; };
+		B00000000000000000000008 /* ConversationExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationExporter.swift; sourceTree = "<group>"; };
+		B00000000000000000000009 /* ConversationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationStore.swift; sourceTree = "<group>"; };
+		B0000000000000000000000A /* DeepSeekClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepSeekClient.swift; sourceTree = "<group>"; };
+		B0000000000000000000000B /* KeychainHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainHelper.swift; sourceTree = "<group>"; };
+		B0000000000000000000000C /* ModelCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelCatalog.swift; sourceTree = "<group>"; };
+		B0000000000000000000000D /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
+		B0000000000000000000000E /* DemoSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoSupport.swift; sourceTree = "<group>"; };
+		B0000000000000000000000F /* ChatViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatViewModel.swift; sourceTree = "<group>"; };
+		B00000000000000000000010 /* ChatScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatScreen.swift; sourceTree = "<group>"; };
+		B00000000000000000000011 /* ComposerBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerBar.swift; sourceTree = "<group>"; };
+		B00000000000000000000012 /* MarkdownText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownText.swift; sourceTree = "<group>"; };
+		B00000000000000000000013 /* MessageRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageRow.swift; sourceTree = "<group>"; };
+		B00000000000000000000014 /* ModelPickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelPickerSheet.swift; sourceTree = "<group>"; };
+		B00000000000000000000015 /* RenameSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RenameSheet.swift; sourceTree = "<group>"; };
+		B00000000000000000000016 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		B00000000000000000000017 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		B00000000000000000000018 /* ShareSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareSheet.swift; sourceTree = "<group>"; };
+		B00000000000000000000019 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
+		B0000000000000000000001A /* ToastCenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToastCenter.swift; sourceTree = "<group>"; };
+		B0000000000000000000001B /* WelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -74,8 +94,9 @@
 				C00000000000000000000004 /* App */,
 				C00000000000000000000005 /* Models */,
 				C00000000000000000000006 /* Services */,
-				C00000000000000000000007 /* ViewModels */,
-				C00000000000000000000008 /* Views */,
+				C00000000000000000000007 /* Support */,
+				C00000000000000000000008 /* ViewModels */,
+				C00000000000000000000009 /* Views */,
 				B000000000000000000001F4 /* Assets.xcassets */,
 			);
 			path = DeepSeekClone;
@@ -101,8 +122,10 @@
 		C00000000000000000000005 /* Models */ = {
 			isa = PBXGroup;
 			children = (
-				B00000000000000000000003 /* ChatModels.swift */,
-				B00000000000000000000004 /* AppSettings.swift */,
+				B00000000000000000000003 /* AppSettings.swift */,
+				B00000000000000000000004 /* Attachment.swift */,
+				B00000000000000000000005 /* ChatModels.swift */,
+				B00000000000000000000006 /* JSONValue.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -110,33 +133,48 @@
 		C00000000000000000000006 /* Services */ = {
 			isa = PBXGroup;
 			children = (
-				B00000000000000000000005 /* DeepSeekClient.swift */,
-				B00000000000000000000006 /* ConversationStore.swift */,
-				B00000000000000000000007 /* SettingsStore.swift */,
-				B00000000000000000000008 /* KeychainHelper.swift */,
+				B00000000000000000000007 /* AttachmentService.swift */,
+				B00000000000000000000008 /* ConversationExporter.swift */,
+				B00000000000000000000009 /* ConversationStore.swift */,
+				B0000000000000000000000A /* DeepSeekClient.swift */,
+				B0000000000000000000000B /* KeychainHelper.swift */,
+				B0000000000000000000000C /* ModelCatalog.swift */,
+				B0000000000000000000000D /* SettingsStore.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
 		};
-		C00000000000000000000007 /* ViewModels */ = {
+		C00000000000000000000007 /* Support */ = {
 			isa = PBXGroup;
 			children = (
-				B00000000000000000000009 /* ChatViewModel.swift */,
+				B0000000000000000000000E /* DemoSupport.swift */,
+			);
+			path = Support;
+			sourceTree = "<group>";
+		};
+		C00000000000000000000008 /* ViewModels */ = {
+			isa = PBXGroup;
+			children = (
+				B0000000000000000000000F /* ChatViewModel.swift */,
 			);
 			path = ViewModels;
 			sourceTree = "<group>";
 		};
-		C00000000000000000000008 /* Views */ = {
+		C00000000000000000000009 /* Views */ = {
 			isa = PBXGroup;
 			children = (
-				B0000000000000000000000A /* RootView.swift */,
-				B0000000000000000000000B /* ChatScreen.swift */,
-				B0000000000000000000000C /* SidebarView.swift */,
-				B0000000000000000000000D /* SettingsView.swift */,
-				B0000000000000000000000E /* MessageRow.swift */,
-				B0000000000000000000000F /* MarkdownText.swift */,
-				B00000000000000000000010 /* ComposerBar.swift */,
-				B00000000000000000000011 /* WelcomeView.swift */,
+				B00000000000000000000010 /* ChatScreen.swift */,
+				B00000000000000000000011 /* ComposerBar.swift */,
+				B00000000000000000000012 /* MarkdownText.swift */,
+				B00000000000000000000013 /* MessageRow.swift */,
+				B00000000000000000000014 /* ModelPickerSheet.swift */,
+				B00000000000000000000015 /* RenameSheet.swift */,
+				B00000000000000000000016 /* RootView.swift */,
+				B00000000000000000000017 /* SettingsView.swift */,
+				B00000000000000000000018 /* ShareSheet.swift */,
+				B00000000000000000000019 /* SidebarView.swift */,
+				B0000000000000000000001A /* ToastCenter.swift */,
+				B0000000000000000000001B /* WelcomeView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -212,21 +250,31 @@
 			files = (
 				A00000000000000000000001 /* DeepSeekCloneApp.swift in Sources */,
 				A00000000000000000000002 /* Theme.swift in Sources */,
-				A00000000000000000000003 /* ChatModels.swift in Sources */,
-				A00000000000000000000004 /* AppSettings.swift in Sources */,
-				A00000000000000000000005 /* DeepSeekClient.swift in Sources */,
-				A00000000000000000000006 /* ConversationStore.swift in Sources */,
-				A00000000000000000000007 /* SettingsStore.swift in Sources */,
-				A00000000000000000000008 /* KeychainHelper.swift in Sources */,
-				A00000000000000000000009 /* ChatViewModel.swift in Sources */,
-				A0000000000000000000000A /* RootView.swift in Sources */,
-				A0000000000000000000000B /* ChatScreen.swift in Sources */,
-				A0000000000000000000000C /* SidebarView.swift in Sources */,
-				A0000000000000000000000D /* SettingsView.swift in Sources */,
-				A0000000000000000000000E /* MessageRow.swift in Sources */,
-				A0000000000000000000000F /* MarkdownText.swift in Sources */,
-				A00000000000000000000010 /* ComposerBar.swift in Sources */,
-				A00000000000000000000011 /* WelcomeView.swift in Sources */,
+				A00000000000000000000003 /* AppSettings.swift in Sources */,
+				A00000000000000000000004 /* Attachment.swift in Sources */,
+				A00000000000000000000005 /* ChatModels.swift in Sources */,
+				A00000000000000000000006 /* JSONValue.swift in Sources */,
+				A00000000000000000000007 /* AttachmentService.swift in Sources */,
+				A00000000000000000000008 /* ConversationExporter.swift in Sources */,
+				A00000000000000000000009 /* ConversationStore.swift in Sources */,
+				A0000000000000000000000A /* DeepSeekClient.swift in Sources */,
+				A0000000000000000000000B /* KeychainHelper.swift in Sources */,
+				A0000000000000000000000C /* ModelCatalog.swift in Sources */,
+				A0000000000000000000000D /* SettingsStore.swift in Sources */,
+				A0000000000000000000000E /* DemoSupport.swift in Sources */,
+				A0000000000000000000000F /* ChatViewModel.swift in Sources */,
+				A00000000000000000000010 /* ChatScreen.swift in Sources */,
+				A00000000000000000000011 /* ComposerBar.swift in Sources */,
+				A00000000000000000000012 /* MarkdownText.swift in Sources */,
+				A00000000000000000000013 /* MessageRow.swift in Sources */,
+				A00000000000000000000014 /* ModelPickerSheet.swift in Sources */,
+				A00000000000000000000015 /* RenameSheet.swift in Sources */,
+				A00000000000000000000016 /* RootView.swift in Sources */,
+				A00000000000000000000017 /* SettingsView.swift in Sources */,
+				A00000000000000000000018 /* ShareSheet.swift in Sources */,
+				A00000000000000000000019 /* SidebarView.swift in Sources */,
+				A0000000000000000000001A /* ToastCenter.swift in Sources */,
+				A0000000000000000000001B /* WelcomeView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -248,7 +296,6 @@
 				CLANG_WARN_BOOL_CONVERSION = YES;
 				CLANG_WARN_COMMA = YES;
 				CLANG_WARN_CONSTANT_CONVERSION = YES;
-				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
 				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
 				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
 				CLANG_WARN_EMPTY_BODY = YES;
@@ -311,7 +358,6 @@
 				CLANG_WARN_BOOL_CONVERSION = YES;
 				CLANG_WARN_COMMA = YES;
 				CLANG_WARN_CONSTANT_CONVERSION = YES;
-				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
 				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
 				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
 				CLANG_WARN_EMPTY_BODY = YES;
@@ -364,6 +410,9 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = DeepSeek;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "用于把语音转成文字发送消息。";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "用于选择照片并识别其中的文字或图片内容。";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "用于把语音识别成文字。";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -374,7 +423,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.deepseekclone;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -397,6 +446,9 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = DeepSeek;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "用于把语音转成文字发送消息。";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "用于选择照片并识别其中的文字或图片内容。";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "用于把语音识别成文字。";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -407,7 +459,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.deepseekclone;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";

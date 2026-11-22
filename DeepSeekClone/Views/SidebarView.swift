@@ -7,6 +7,9 @@ struct SidebarView: View {
     var onSelect: (Conversation) -> Void
     var onNewChat: () -> Void
     var onDelete: (UUID) -> Void
+    var onRename: (Conversation) -> Void
+    var onExport: (Conversation) -> Void
+    var onTogglePin: (Conversation) -> Void
     var onSettings: () -> Void
 
     var body: some View {
@@ -93,7 +96,7 @@ struct SidebarView: View {
             onSelect(conversation)
         } label: {
             HStack(spacing: 9) {
-                Image(systemName: "bubble.left")
+                Image(systemName: (conversation.isPinned ?? false) ? "pin.fill" : "bubble.left")
                     .font(.system(size: 13))
                     .foregroundStyle(selected ? DSTheme.accent : DSTheme.textSecondary)
 
@@ -124,11 +127,13 @@ struct SidebarView: View {
         }
         .buttonStyle(.plain)
         .contextMenu {
-            Button(role: .destructive) {
-                onDelete(conversation.id)
-            } label: {
-                Label("删除对话", systemImage: "trash")
+            Button { onRename(conversation) } label: { Label("重命名", systemImage: "pencil") }
+            Button { onTogglePin(conversation) } label: {
+                Label((conversation.isPinned ?? false) ? "取消置顶" : "置顶", systemImage: (conversation.isPinned ?? false) ? "pin.slash" : "pin")
             }
+            Button { onExport(conversation) } label: { Label("导出 Markdown", systemImage: "square.and.arrow.up") }
+            Divider()
+            Button(role: .destructive) { onDelete(conversation.id) } label: { Label("删除对话", systemImage: "trash") }
         }
     }
 
