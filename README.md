@@ -1,6 +1,6 @@
-# DeepSeek 风格 iOS 客户端（SwiftUI 源码 + 免 Mac 打包流水线）
+# DeepSeek 风格 iOS 客户端 v1.2（SwiftUI · 官方鲸鱼图标 · 多模态/联网/文件）
 
-一个模仿 DeepSeek 官方 App 界面的非官方 iOS 客户端，**直接调用 DeepSeek 官方 API**（OpenAI 兼容接口，支持流式输出、深度思考 R1、多会话、Markdown、代码块等）。
+一个模仿 DeepSeek 官方 App 界面的非官方 iOS 客户端，**直接调用 DeepSeek 2026 版官方 API**（Chat Completions）：思考模式与强度、联网搜索/阅读链接、图片理解、文件（PDF/Word/PPT）解析、会话标题、引用来源卡片、Markdown 渲染。已通过 GitHub Actions 在 macOS 上编译成功，并用 iOS 模拟器截图验证。
 
 > 先说最重要的一件事：**在 Windows 上无法编译出可安装的 .ipa**。  
 > .ipa 不是普通的压缩包，它是「ARM64 可执行文件 + Info.plist + 资源」再用 Apple 的开发者证书签名后的产物，必须由 macOS 上的 Xcode（以及 Apple 的签名体系）生成。当前工作环境是 Windows + 没有 Xcode，也没有你的 Apple 开发者证书，所以这里交付的是**完整可直接编译的 Xcode 工程 + 一条能自动产出 .ipa 的免费流水线**，而不是一个我伪造出来的 .ipa（伪造的签名文件装不上任何 iPhone）。
@@ -9,15 +9,23 @@
 
 ## 界面预览
 
-以下截图来自仓库自带的网页版（`web/index.html`）。iOS 原生版与它共用同一套设计令牌和布局（品牌蓝 #4D6BFE、大圆角气泡、欢迎页建议卡、侧边抽屉、可折叠的「已深度思考」、代码块一键复制、深浅色自适应）。
+界面令牌：品牌蓝 #4D6BFE、大圆角、欢迎页建议卡、侧边抽屉、可折叠的「已深度思考」、来源卡片、代码块一键复制、深浅色自适应。
 
-| 欢迎页 | 对话 + Markdown 代码块 |
+以下为 **iOS 模拟器实拍**（GitHub Actions 编译并运行 App 后截图）：
+
+| 首页 | 对话 / 思考 / 来源卡片 |
 | --- | --- |
-| ![欢迎页](docs/screenshots/web-welcome.png) | ![对话](docs/screenshots/web-chat.png) |
+| ![首页](docs/screenshots/ios-home.png) | ![对话](docs/screenshots/ios-chat.png) |
 
-| 设置 | 会话抽屉 | 深色模式 |
+| 设置 | 会话抽屉 |
+| --- | --- |
+| ![设置](docs/screenshots/ios-settings.png) | ![抽屉](docs/screenshots/ios-drawer.png) |
+
+网页版截图（`web/index.html`，设计令牌与原生版一致）：
+
+| 欢迎页 | 设置 | 深色 |
 | --- | --- | --- |
-| ![设置](docs/screenshots/web-settings.png) | ![抽屉](docs/screenshots/web-drawer.png) | ![深色](docs/screenshots/web-chat-dark.png) |
+| ![网页欢迎页](docs/screenshots/web-welcome.png) | ![网页设置](docs/screenshots/web-settings.png) | ![网页深色](docs/screenshots/web-chat-dark.png) |
 
 App 图标（1024×1024，已放进工程）：![图标](docs/screenshots/app-icon-1024.png)
 
@@ -28,21 +36,29 @@ App 图标（1024×1024，已放进工程）：![图标](docs/screenshots/app-ic
 | 路径 | 内容 |
 | --- | --- |
 | `DeepSeekClone.xcodeproj` | 可直接用 Xcode 打开的工程（iOS 16+，SwiftUI，无任何第三方依赖） |
-| `DeepSeekClone/` | 全部 Swift 源码（17 个文件，约 1950 行） |
+| `DeepSeekClone/` | 全部 Swift 源码（27 个文件，约 4002 行） |
 | `DeepSeekClone/Assets.xcassets` | App 图标（1024×1024，已生成）+ 主题色 |
 | `.github/workflows/build-ipa.yml` | GitHub Actions 流水线：免费 macOS 机器编译 → 输出未签名 `.ipa` |
 | `web/index.html` | **备用方案**：手机网页版，界面一致，现在就能在 iPhone 上「添加到主屏幕」使用 |
-| `tools/make_icon.py` | 图标生成脚本（想换配色可以改它重新生成） |
+| `tools/icon-variants/` | App 图标（官方鲸鱼「大肥鱼」，仅个人自用） |
+| `docs/api-spec.md` | DeepSeek 2026 版 API 规格整理（请求/图片/文件/流式协议） |
+| `docs/screenshots/` | iOS 模拟器实拍截图 + 网页版截图 |
 
 功能：
 
 - 流式输出（SSE），逐字显示，可随时中断
-- `deepseek-chat` / `deepseek-reasoner` 切换；R1 的思维链（reasoning_content）以「已深度思考」折叠块展示
-- 多会话历史、自动命名、删除、清空，本地持久化
-- 侧边抽屉（会话列表）、欢迎页、建议卡片、输入框自增高
+- **动态模型列表**：启动时 GET /models 拉取（DeepSeek-V4.1-Flash / DeepSeek-V4-Pro …），支持自定义模型 ID
+- **思考模式**：开关 + 强度（低/高/极高），思维链以「已深度思考」折叠块展示
+- **联网搜索 / 阅读链接**：服务端工具，界面显示搜索中状态、来源卡片（可展开）与正文引用链接
+- **图片输入**：相册选图 → 本地压缩 + OCR → 以多模态 content part 发送（仅 V4.1-Flash）
+- **文件输入**：txt/md/代码/PDF 本地提取文本；PDF/Word/PPT 上传 Files API 云端解析（`file_id` 引用）
+- 附件预览条（缩略图/文件名/字数），可删除
+- 多会话：新建、重命名、置顶、删除、导出 Markdown、自动生成标题、本地持久化
+- 消息操作：复制、删除单条、重新生成、长按菜单
 - Markdown：代码块（横向滚动 + 一键复制）、行内代码、粗体/斜体/列表
-- 设置页：API Key（存钥匙串）、Base URL、模型、温度、系统提示词、测试连接
-- 深浅色自动适配、iPhone / iPad 自适应
+- 设置页：API Key（钥匙串）、Base URL、模型、思考强度、联网开关、内容安全、温度、上下文上限、消息字号、系统提示词、测试连接
+- 深浅色自动适配、iPhone / iPad 自适应；顶部只有「+ 新建对话」，设置统一在侧边栏与输入框菜单里
+
 
 ---
 
