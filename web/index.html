@@ -205,23 +205,14 @@ button{border:0;background:none;padding:0;cursor:pointer;touch-action: manipulat
         <hr class="hr">
         <div class="group-title">数据</div>
         <div class="test-row">
-          <button id="exportBtn" class="btn" type="button">导出全部对话</button>
-          <button id="importBtn" class="btn" type="button">导入对话</button>
-          <input id="importFile" type="file" accept=".json,application/json" hidden>
+          <button id="exportBtn" class="btn" type="button">导出全部对话</button><button id="importBtn" class="btn" type="button">导入对话</button><input id="importFile" type="file" accept=".json,application/json" hidden>
         </div>
         <p class="hint">导出为 iOS 原生版共用的 deepseek-clone JSON；导入时按 id 合并。</p>
         <div class="group-title">同步</div>
-        <label class="field" for="syncUrl"><span>同步地址</span>
-          <input id="syncUrl" type="url" inputmode="url" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="https://xxx.workers.dev/sync">
-        </label>
-        <label class="field" for="syncKey"><span>同步密钥</span>
-          <input id="syncKey" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="X-Sync-Key">
-          <p class="hint">密钥只保存在本机 localStorage，请求通过 X-Sync-Key 头发送。</p>
-        </label>
+        <label class="field" for="syncUrl"><span>同步地址</span><input id="syncUrl" type="url" inputmode="url" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="https://xxx.workers.dev/sync"></label>
+        <label class="field" for="syncKey"><span>同步密钥</span><input id="syncKey" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="X-Sync-Key"><p class="hint">密钥只保存在本机 localStorage，请求通过 X-Sync-Key 头发送。</p></label>
         <div class="test-row">
-          <button id="syncUpload" class="btn" type="button">上传到云端</button>
-          <button id="syncDownload" class="btn" type="button">从云端下载</button>
-          <button id="syncBoth" class="btn" type="button">双向同步</button>
+          <button id="syncUpload" class="btn" type="button">上传到云端</button><button id="syncDownload" class="btn" type="button">从云端下载</button><button id="syncBoth" class="btn" type="button">双向同步</button>
         </div>
         <div id="syncStatus" class="sync-status" role="status"></div>
         <hr class="hr">
@@ -275,6 +266,7 @@ button{border:0;background:none;padding:0;cursor:pointer;touch-action: manipulat
   function uid() {
     return window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() : 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   }
+  function isUUID(value) { return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value); }
   function normalizeModel(id) { for (var i = 0; i < MODELS.length; i++) { if (MODELS[i].id === id) return id; } return MODELS[0].id; }
   function modelLabel(id) { for (var i = 0; i < MODELS.length; i++) { if (MODELS[i].id === id) return MODELS[i].label; } return MODELS[0].label; }
   // 设置与会话：全部持久化到带 ds_clone_ 前缀的 localStorage
@@ -290,39 +282,38 @@ button{border:0;background:none;padding:0;cursor:pointer;touch-action: manipulat
     syncKey: typeof storedSettings.syncKey === 'string' ? storedSettings.syncKey : ''
   };
   if (!isFinite(settings.temperature)) settings.temperature = 1;
+  function toMs(value, fallback) {
+    if (typeof value === 'number' && isFinite(value)) return value;
+    if (typeof value === 'string') { var t = Date.parse(value); if (!isNaN(t)) return t; }
+    return fallback || Date.now();
+  }
   function normalizeSession(raw) {
-    if (!raw || typeof raw !== 'object' || typeof raw.id !== 'string' || !Array.isArray(raw.messages)) return null;
-    var messages = [];
+    if (!raw || typeof raw !== 'object' || !Array.isArray(raw.messages)) return null;
+    var now = Date.now(), model = typeof raw.model === 'string' ? raw.model : '', messages = [];
     raw.messages.forEach(function (m) {
-      if (!m || (m.role !== 'user' && m.role !== 'assistant') || typeof m.content !== 'string') return;
-      var item = {
-        id: typeof m.id === 'string' ? m.id : uid(),
-        role: m.role,
-        content: m.content,
-        createdAt: Number(m.createdAt) || Date.now()
-      };
+      if (!m || ['user', 'assistant', 'system'].indexOf(m.role) < 0) return;
+      var item = { id: isUUID(m.id) ? m.id : uid(), role: m.role, content: typeof m.content === 'string' ? m.content : '', createdAt: toMs(m.createdAt, now) };
       if (m.role === 'assistant') {
         item.reasoning = typeof m.reasoning === 'string' ? m.reasoning : '';
-        item.model = normalizeModel(m.model);
+        item.model = typeof m.model === 'string' && m.model ? m.model : model;
         item.error = typeof m.error === 'string' ? m.error : '';
-        if (!item.content && !item.reasoning && !item.error) return;
       }
+      item.attachments = Array.isArray(m.attachments) ? m.attachments : null;
+      item.attachmentPrompt = typeof m.attachmentPrompt === 'string' ? m.attachmentPrompt : null;
+      item.sources = Array.isArray(m.sources) ? m.sources : null;
+      item.searchQueries = Array.isArray(m.searchQueries) ? m.searchQueries : null;
+      item.citations = Array.isArray(m.citations) ? m.citations : null;
+      item.serverToolJSON = m.serverToolJSON === undefined ? null : m.serverToolJSON;
+      item.finishReason = typeof m.finishReason === 'string' ? m.finishReason : null;
+      item.refusalText = typeof m.refusalText === 'string' ? m.refusalText : null;
+      if (m.role === 'assistant' && !item.content && !item.reasoning && !item.error && !item.refusalText && !(item.attachments && item.attachments.length)) return;
       messages.push(item);
     });
     if (!messages.length) return null;
     var title = typeof raw.title === 'string' && raw.title.trim() ? raw.title.trim() : '';
-    if (!title) {
-      for (var i = 0; i < messages.length; i++) {
-        if (messages[i].role === 'user' && messages[i].content.trim()) { title = sessionTitle(messages[i].content); break; }
-      }
-    }
-    return {
-      id: raw.id,
-      title: title || '新对话',
-      createdAt: Number(raw.createdAt) || Date.now(),
-      updatedAt: Number(raw.updatedAt) || Date.now(),
-      messages: messages
-    };
+    if (!title) for (var i = 0; i < messages.length; i++) if (messages[i].role === 'user' && messages[i].content.trim()) { title = sessionTitle(messages[i].content); break; }
+    if (!model) for (var j = messages.length - 1; j >= 0; j--) if (messages[j].role === 'assistant' && messages[j].model) { model = messages[j].model; break; }
+    return { id: isUUID(raw.id) ? raw.id : uid(), title: title || '新对话', model: model || 'deepseek-chat', isPinned: !!raw.isPinned, createdAt: toMs(raw.createdAt, now), updatedAt: toMs(raw.updatedAt, now), messages: messages };
   }
   var sessions = [];
   var rawSessions = read('sessions', []);
@@ -359,7 +350,7 @@ button{border:0;background:none;padding:0;cursor:pointer;touch-action: manipulat
   function ensureSession() {
     var s = getSession();
     if (s) return s;
-    s = { id: uid(), title: '新对话', createdAt: Date.now(), updatedAt: Date.now(), messages: [] };
+    s = { id: uid(), title: '新对话', model: settings.model, isPinned: false, createdAt: Date.now(), updatedAt: Date.now(), messages: [] };
     sessions.unshift(s);
     currentId = s.id;
     return s;
@@ -400,6 +391,124 @@ button{border:0;background:none;padding:0;cursor:pointer;touch-action: manipulat
     if (d.getFullYear() === now.getFullYear()) return (d.getMonth() + 1) + '月' + d.getDate() + '日';
     return d.getFullYear() + '/' + pad(d.getMonth() + 1) + '/' + pad(d.getDate());
   }
+  function pad2(n) { return n < 10 ? '0' + n : String(n); }
+  function exportMessage(m) {
+    return { id: m.id || uid(), role: m.role, content: typeof m.content === 'string' ? m.content : '', reasoning: typeof m.reasoning === 'string' && m.reasoning ? m.reasoning : null, createdAt: new Date(toMs(m.createdAt)).toISOString().replace(/\.\d{3}Z$/, 'Z'),
+      attachments: Array.isArray(m.attachments) ? m.attachments : null, attachmentPrompt: typeof m.attachmentPrompt === 'string' ? m.attachmentPrompt : null,
+      sources: Array.isArray(m.sources) ? m.sources : null, searchQueries: Array.isArray(m.searchQueries) ? m.searchQueries : null,
+      citations: Array.isArray(m.citations) ? m.citations : null, serverToolJSON: m.serverToolJSON === undefined ? null : m.serverToolJSON,
+      finishReason: typeof m.finishReason === 'string' ? m.finishReason : null, refusalText: typeof m.refusalText === 'string' ? m.refusalText : null };
+  }
+  function buildExportData() {
+    return { format: 'deepseek-clone', version: 1, exportedAt: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'), conversations: sessions.slice().sort(function (a, b) { return b.updatedAt - a.updatedAt; }).map(function (s) {
+      return { id: s.id, title: s.title || '新对话', model: s.model || 'deepseek-chat', updatedAt: new Date(toMs(s.updatedAt)).toISOString().replace(/\.\d{3}Z$/, 'Z'), isPinned: !!s.isPinned, messages: s.messages.map(exportMessage) };
+    }) };
+  }
+  function downloadExport() {
+    var data = buildExportData(), blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json;charset=utf-8' });
+    var url = URL.createObjectURL(blob), a = document.createElement('a'), d = new Date();
+    a.href = url; a.download = 'deepseek-clone-export-' + d.getFullYear() + pad2(d.getMonth() + 1) + pad2(d.getDate()) + '.json';
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    toast('已导出 ' + data.conversations.length + ' 个会话');
+  }
+  function conversationsFromPayload(parsed) {
+    if (Array.isArray(parsed)) return parsed;
+    if (!parsed || typeof parsed !== 'object') return [];
+    var keys = ['conversations', 'sessions', 'ds_clone_sessions', 'data'];
+    for (var i = 0; i < keys.length; i++) if (Array.isArray(parsed[keys[i]])) return parsed[keys[i]];
+    return Array.isArray(parsed.messages) ? [parsed] : [];
+  }
+  function normalizeConversations(parsed) {
+    var list = conversationsFromPayload(parsed);
+    if (list.length && list.every(function (x) { return x && typeof x === 'object' && x.role && !Array.isArray(x.messages); })) {
+      list = [{ id: uid(), title: '导入的对话', updatedAt: new Date().toISOString(), messages: list }];
+    }
+    var out = [];
+    list.forEach(function (raw) { var c = normalizeSession(raw); if (c) out.push(c); });
+    return out;
+  }
+  function mergeConversationList(incoming) {
+    if (!incoming.length) return 0;
+    var positions = {};
+    sessions.forEach(function (s, i) { positions[s.id] = i; });
+    incoming.forEach(function (s) {
+      var at = positions[s.id];
+      if (at === undefined) { positions[s.id] = sessions.length; sessions.push(s); }
+      else if (s.updatedAt > sessions[at].updatedAt) sessions[at] = s;
+    });
+    persistSessions();
+    renderAll();
+    return incoming.length;
+  }
+  function importFile(file) {
+    var reader = new FileReader();
+    reader.onload = function () {
+      try {
+        var incoming = normalizeConversations(JSON.parse(String(reader.result)));
+        if (!incoming.length) throw new Error('没有可导入的会话');
+        mergeConversationList(incoming);
+        toast('导入 ' + incoming.length + ' 个会话');
+      } catch (e) { toast('导入失败：' + (e.message || e), 'error'); }
+    };
+    reader.onerror = function () { toast('读取文件失败', 'error'); };
+    reader.readAsText(file, 'utf-8');
+  }
+
+  function setSyncStatus(message, type) {
+    els.syncStatus.textContent = message;
+    els.syncStatus.className = 'sync-status' + (type ? ' ' + type : '');
+  }
+  function setSyncBusy(busy) { [els.syncUpload, els.syncDownload, els.syncBoth].forEach(function (b) { b.disabled = busy; }); }
+  async function syncHttpError(res) {
+    var detail = '';
+    try { detail = await res.text(); } catch (e) {}
+    try { var parsed = JSON.parse(detail); detail = (parsed.error && parsed.error.message) || parsed.message || ''; } catch (e) {}
+    detail = String(detail || '').replace(/\s+/g, ' ').slice(0, 120);
+    var msg = (res.status === 401 || res.status === 403) ? '同步密钥无效或无权限（HTTP ' + res.status + '）。' : res.status === 404 ? '同步地址不存在（HTTP 404）。' : res.status >= 500 ? '同步服务暂时不可用（HTTP ' + res.status + '）。' : '同步请求失败（HTTP ' + res.status + '）。';
+    if (detail) msg += ' ' + detail;
+    var err = new Error(msg); err.friendly = msg; return err;
+  }
+  async function syncRequest(method, payload) {
+    var headers = { 'X-Sync-Key': settings.syncKey.trim() };
+    if (payload !== undefined) headers['Content-Type'] = 'application/json';
+    var res = await fetch(settings.syncURL.trim(), { method: method, headers: headers, body: payload === undefined ? undefined : JSON.stringify(payload) });
+    if (!res.ok) throw await syncHttpError(res);
+    return method === 'GET' ? res.json() : null;
+  }
+  async function runSync(mode) {
+    if (syncBusy) return;
+    syncSettingsFromUI();
+    var url = settings.syncURL.trim(), key = settings.syncKey.trim();
+    if (!url || !/^https?:\/\//i.test(url)) { setSyncStatus('请填写正确的同步地址。', 'error'); return; }
+    if (!key) { setSyncStatus('请填写同步密钥。', 'error'); return; }
+    syncBusy = true; setSyncBusy(true); setSyncStatus('正在连接云端…', '');
+    try {
+      if (mode === 'upload') {
+        var data = buildExportData();
+        await syncRequest('PUT', data);
+        setSyncStatus('已上传 ' + data.conversations.length + ' 个会话。', 'success');
+        toast('已上传 ' + data.conversations.length + ' 个会话');
+        return;
+      }
+      var incoming = normalizeConversations(await syncRequest('GET'));
+      mergeConversationList(incoming);
+      if (mode === 'both') {
+        var merged = buildExportData();
+        await syncRequest('PUT', merged);
+        setSyncStatus('双向同步完成，共 ' + merged.conversations.length + ' 个会话。', 'success');
+        toast('双向同步完成');
+      } else {
+        setSyncStatus('已从云端下载 ' + incoming.length + ' 个会话。', 'success');
+        toast('已从云端下载 ' + incoming.length + ' 个会话');
+      }
+    } catch (err) {
+      var msg = err && err.name === 'TypeError' ? '无法连接同步地址，请检查地址、网络或 CORS 配置。' : friendlyError(err);
+      setSyncStatus(msg, 'error'); toast(msg, 'error');
+    } finally {
+      syncBusy = false; setSyncBusy(false);
+    }
+  }
+
   // 轻量 Markdown：先整体转义，再解析行内与块级语法
   var RE_FENCE_OPEN = new RegExp('^ {0,3}' + BT + BT + BT + '\\s*([^' + BT + ']*)$');
   var RE_FENCE_CLOSE = new RegExp('^ {0,3}' + BT + BT + BT + '\\s*$');
@@ -481,6 +590,7 @@ button{border:0;background:none;padding:0;cursor:pointer;touch-action: manipulat
     var msgs = session.messages;
     var lastId = msgs.length ? msgs[msgs.length - 1].id : null;
     els.messageList.innerHTML = msgs.map(function (m) {
+      if (m.role === 'system') return '';
       if (m.role === 'user') {
         return '<article class="msg user" data-msg-id="' + escapeHtml(m.id) + '"><div class="user-bubble">' + escapeHtml(m.content) + '</div></article>';
       }
@@ -721,6 +831,7 @@ button{border:0;background:none;padding:0;cursor:pointer;touch-action: manipulat
       session.messages.push({ id: uid(), role: 'user', content: text, createdAt: Date.now() });
     }
     session.updatedAt = Date.now();
+    session.model = settings.model;
     var assistant = {
       id: uid(), role: 'assistant', content: '', reasoning: '',
       model: settings.model, createdAt: Date.now(), streaming: true, error: ''
@@ -821,6 +932,7 @@ button{border:0;background:none;padding:0;cursor:pointer;touch-action: manipulat
     closePlusMenu();
     applySettingsToUI();
     setTestStatus('', '');
+    setSyncStatus('', '');
     els.settingsOverlay.classList.add('open');
     els.settingsOverlay.setAttribute('aria-hidden', 'false');
   }
@@ -834,6 +946,8 @@ button{border:0;background:none;padding:0;cursor:pointer;touch-action: manipulat
     els.temp.value = settings.temperature;
     els.tempValue.textContent = Number(settings.temperature).toFixed(1);
     els.systemPrompt.value = settings.systemPrompt;
+    els.syncUrl.value = settings.syncURL;
+    els.syncKey.value = settings.syncKey;
     els.apiKey.type = 'password';
     els.toggleKey.textContent = '显示';
     els.toggleKey.setAttribute('aria-label', '显示 API Key');
@@ -845,6 +959,8 @@ button{border:0;background:none;padding:0;cursor:pointer;touch-action: manipulat
     settings.temperature = Math.max(0, Math.min(2, Number(els.temp.value)));
     if (!isFinite(settings.temperature)) settings.temperature = 1;
     settings.systemPrompt = els.systemPrompt.value;
+    settings.syncURL = els.syncUrl.value.trim();
+    settings.syncKey = els.syncKey.value;
     save('settings', settings);
   }
   function setTestStatus(message, type) {
@@ -1025,6 +1141,12 @@ button{border:0;background:none;padding:0;cursor:pointer;touch-action: manipulat
       els.toggleKey.setAttribute('aria-label', show ? '隐藏 API Key' : '显示 API Key');
     });
     els.testBtn.addEventListener('click', testConnection);
+    els.exportBtn.addEventListener('click', downloadExport);
+    els.importBtn.addEventListener('click', function () { els.importFile.click(); });
+    els.importFile.addEventListener('change', function (e) { var f = e.target.files && e.target.files[0]; e.target.value = ''; if (f) importFile(f); });
+    els.syncUrl.addEventListener('input', function () { settings.syncURL = els.syncUrl.value; save('settings', settings); });
+    els.syncKey.addEventListener('input', function () { settings.syncKey = els.syncKey.value; save('settings', settings); });
+    [['syncUpload', 'upload'], ['syncDownload', 'download'], ['syncBoth', 'both']].forEach(function (x) { els[x[0]].addEventListener('click', function () { runSync(x[1]); }); });
     els.clearAll.addEventListener('click', clearAllSessions);
     els.historyList.addEventListener('click', function (e) {
       var item = e.target.closest('.history-item');
@@ -1109,6 +1231,7 @@ button{border:0;background:none;padding:0;cursor:pointer;touch-action: manipulat
     autosize();
     updateSendState();
     renderAll();
+    persistSessions();
   }
   init();
 })();

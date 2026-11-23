@@ -1,4 +1,4 @@
-# DeepSeek 风格 iOS 客户端 v1.4（SwiftUI · 官方鲸鱼图标 · 多模态/联网/文件/语音/拍照）
+# DeepSeek 风格 iOS 客户端 v1.5（SwiftUI · 首页对齐官方 · 多模态/联网/文件/语音/拍照 · 多端同步）
 
 一个模仿 DeepSeek 官方 App 界面的非官方 iOS 客户端，**直接调用 DeepSeek 2026 版官方 API**（Chat Completions）：思考模式与强度、联网搜索/阅读链接、图片理解、文件（PDF/Word/PPT）解析、会话标题、引用来源卡片、Markdown 渲染。已通过 GitHub Actions 在 macOS 上编译成功，并用 iOS 模拟器截图验证。
 
@@ -39,7 +39,8 @@ App 图标（1024×1024，已放进工程）：![图标](docs/screenshots/app-ic
 | `DeepSeekClone/` | 全部 Swift 源码（27 个文件，约 4002 行） |
 | `DeepSeekClone/Assets.xcassets` | App 图标（1024×1024，已生成）+ 主题色 |
 | `.github/workflows/build-ipa.yml` | GitHub Actions 流水线：免费 macOS 机器编译 → 输出未签名 `.ipa` |
-| `web/index.html` | **备用方案**：手机网页版，界面一致，现在就能在 iPhone 上「添加到主屏幕」使用 |
+| `web/index.html` | **备用方案**：手机网页版，界面一致，支持导出/导入与同一套多端同步协议 |
+| `docs/SYNC.md` + `docs/sync-worker.js` | 多端同步：5 分钟部署 Cloudflare Worker 的完整说明与代码 |
 | `tools/icon-variants/` | App 图标（官方鲸鱼「大肥鱼」，仅个人自用） |
 | `docs/api-spec.md` | DeepSeek 2026 版 API 规格整理（请求/图片/文件/流式协议） |
 | `docs/screenshots/` | iOS 模拟器实拍截图 + 网页版截图 |
@@ -53,9 +54,13 @@ App 图标（1024×1024，已放进工程）：![图标](docs/screenshots/app-ic
 - **图片输入**：**拍照** 或 相册选图 → 本地压缩 + OCR → 以多模态 content part 发送（仅 V4.1-Flash）
 - **文件输入**：txt/md/代码/PDF 本地提取文本；PDF/Word/PPT 上传 Files API 云端解析（`file_id` 引用）
 - 附件预览条（缩略图/文件名/字数），可删除
+- **首页对齐官方 App**：欢迎语「欢迎回来，随时开始吧」+ 大输入卡片（发消息或按住说话 / 深度思考 / 智能搜索 / 清空 / 麦克风）+ 底部「拍照 / 相册 / 文件」三张卡 + 顶栏圆形菜单/朗读/新建按钮
 - **语音输入**：输入框麦克风按钮录音（16k 单声道 WAV）→ 官方 ASR 转文字填入输入框，最长约 110 秒
 - **朗读回答**：每条回答下方「朗读」按钮 → 官方 TTS 合成 wav 播放，可选 stella 女声 / tide 男声，再点停止
 - 多会话：新建、重命名、置顶、删除、导出 Markdown、自动生成标题、本地持久化
+- **导入 / 导出**：一键导出全部对话为 JSON（与网页版通用），也能导入 `{title, messages}` 结构的第三方历史或 Markdown
+- **多端同步**：设置里填自建同步地址 + 密钥即可 App ↔ 网页版双向同步（Cloudflare Worker 脚本见 `docs/sync-worker.js`，说明见 `docs/SYNC.md`）
+- **自动朗读**：可开启「回答生成后自动朗读」，顶栏喇叭按钮随时开关
 - 消息操作：复制、删除单条、重新生成、长按菜单
 - Markdown：代码块（横向滚动 + 一键复制）、行内代码、粗体/斜体/列表
 - 设置页：API Key（钥匙串）、Base URL、模型、思考强度、联网开关、内容安全、温度、上下文上限、消息字号、朗读音色、系统提示词、测试连接

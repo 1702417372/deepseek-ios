@@ -57,10 +57,11 @@ final class SyncService: ObservableObject {
         guard (200..<300).contains(http.statusCode) else {
             throw DeepSeekError(message: "下载失败（HTTP \(http.statusCode)）：\(String((String(data: data, encoding: .utf8) ?? "").prefix(160)))")
         }
-        if data.isEmpty || data == Data("{}{}".utf8) { return [] }
-        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let empty = json["conversations"] as? [Any], empty.isEmpty {
-            return []
+        if data.isEmpty { return [] }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        if let payload = try? decoder.decode(RemotePayload.self, from: data) {
+            return payload.conversations
         }
         return try ConversationArchive.decode(data)
     }

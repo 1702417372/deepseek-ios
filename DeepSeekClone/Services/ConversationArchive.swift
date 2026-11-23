@@ -10,6 +10,25 @@ enum ConversationArchive {
         var version: Int = ConversationArchive.formatVersion
         var exportedAt: Date = Date()
         var conversations: [Conversation]
+
+        private enum CodingKeys: String, CodingKey {
+            case format
+            case version
+            case exportedAt
+            case conversations
+        }
+
+        init(conversations: [Conversation]) {
+            self.conversations = conversations
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            format = try container.decodeIfPresent(String.self, forKey: .format) ?? ConversationArchive.formatName
+            version = try container.decodeIfPresent(Int.self, forKey: .version) ?? ConversationArchive.formatVersion
+            exportedAt = try container.decodeIfPresent(Date.self, forKey: .exportedAt) ?? Date()
+            conversations = try container.decodeIfPresent([Conversation].self, forKey: .conversations) ?? []
+        }
     }
 
     static func exportData(_ conversations: [Conversation]) throws -> Data {
@@ -38,8 +57,10 @@ enum ConversationArchive {
             return list
         }
         if let object = try? JSONSerialization.jsonObject(with: data) {
+            // 只要是合法 JSON，就只按 JSON 解析；解析不出来直接报错，绝不把 JSON 当 Markdown 文本
             let generic = decodeGeneric(object)
             if !generic.isEmpty { return generic }
+            throw DeepSeekError(message: "这是 JSON 文件，但没有识别出会话（conversations/messages）字段。")
         }
         if let text = String(data: data, encoding: .utf8), !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return decodeMarkdown(text)
@@ -107,8 +128,7 @@ enum ConversationArchive {
             guard !content.isEmpty else { continue }
             messages.append(ChatMessage(role: role, content: content))
         }
-        guard !messages.isEmpty else { return nil }
-
+        // 允许空会话（官方格式里「新对话」可能没有任何消息）
         var conversation = Conversation(model: "deepseek-flash")
         conversation.title = title
         conversation.messages = messages
