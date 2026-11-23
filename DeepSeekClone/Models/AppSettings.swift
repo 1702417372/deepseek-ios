@@ -57,9 +57,12 @@ struct AppSettings: Codable, Equatable {
     var ttsVoice: String = "stella"
     /// 回答生成完自动朗读
     var autoReadAnswers: Bool = false
-    /// 多端同步
-    var syncURL: String = ""
-    var syncKey: String = ""
+    /// 多端同步（默认指向内置 Cloudflare Worker，装好就能用）
+    static let defaultSyncURL = "https://deepseek-sync.1702417372.workers.dev/sync"
+    static let defaultSyncKey = "yg-7k2m9x4q"
+
+    var syncURL: String = AppSettings.defaultSyncURL
+    var syncKey: String = AppSettings.defaultSyncKey
     var autoSyncEnabled: Bool = true
 
     init() {}
@@ -88,6 +91,8 @@ struct AppSettings: Codable, Equatable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         apiKey = try container.decodeIfPresent(String.self, forKey: .apiKey) ?? ""
+        // 旧版本没有默认同步地址时补上，避免升级后同步为空
+
         baseURL = try container.decodeIfPresent(String.self, forKey: .baseURL) ?? "https://api.deepseek.com"
         model = try container.decodeIfPresent(String.self, forKey: .model) ?? DeepSeekModel.flash.rawValue
         temperature = try container.decodeIfPresent(Double.self, forKey: .temperature) ?? 1.0
@@ -102,8 +107,10 @@ struct AppSettings: Codable, Equatable {
         fontScale = try container.decodeIfPresent(Double.self, forKey: .fontScale) ?? 1.0
         ttsVoice = try container.decodeIfPresent(String.self, forKey: .ttsVoice) ?? "stella"
         autoReadAnswers = try container.decodeIfPresent(Bool.self, forKey: .autoReadAnswers) ?? false
-        syncURL = try container.decodeIfPresent(String.self, forKey: .syncURL) ?? ""
-        syncKey = try container.decodeIfPresent(String.self, forKey: .syncKey) ?? ""
+        let storedSyncURL = try container.decodeIfPresent(String.self, forKey: .syncURL) ?? ""
+        syncURL = storedSyncURL.isEmpty ? AppSettings.defaultSyncURL : storedSyncURL
+        let storedSyncKey = try container.decodeIfPresent(String.self, forKey: .syncKey) ?? ""
+        syncKey = storedSyncKey.isEmpty ? AppSettings.defaultSyncKey : storedSyncKey
         autoSyncEnabled = try container.decodeIfPresent(Bool.self, forKey: .autoSyncEnabled) ?? true
     }
 

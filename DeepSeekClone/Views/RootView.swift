@@ -13,17 +13,16 @@ struct RootView: View {
 
     @State private var sidebarOpen = false
     @State private var didBootstrap = false
+    @State private var settingsOpen = false
     @State private var activeSheet: ActiveSheet?
     @State private var confirmClearChat = false
 
     private enum ActiveSheet: Identifiable {
-        case settings
         case share(URL)
         case rename(Conversation)
 
         var id: String {
             switch self {
-            case .settings: return "settings"
             case .share(let url): return "share-" + url.absoluteString
             case .rename(let conversation): return "rename-" + conversation.id.uuidString
             }
@@ -36,7 +35,7 @@ struct RootView: View {
                 chat: chat,
                 onMenu: { setSidebar(true) },
                 onNewChat: { newChat() },
-                onOpenSettings: { activeSheet = .settings },
+                onOpenSettings: { openSettings() },
                 onToast: { toast.show($0) }
             )
             .disabled(sidebarOpen)
@@ -74,7 +73,7 @@ struct RootView: View {
                     },
                     onSettings: {
                         setSidebar(false)
-                        activeSheet = .settings
+                        openSettings()
                     }
                 )
                 .frame(width: sidebarWidth)
@@ -82,8 +81,10 @@ struct RootView: View {
                 .zIndex(1)
             }
         }
+        .overlay { settingsOverlay }
         .overlay(alignment: .bottom) { toastOverlay }
         .animation(.spring(response: 0.32, dampingFraction: 0.86), value: sidebarOpen)
+        .animation(.easeInOut(duration: 0.2), value: settingsOpen)
         .animation(.easeInOut(duration: 0.2), value: toast.message)
         .onAppear(perform: bootstrap)
         .task {
@@ -98,6 +99,13 @@ struct RootView: View {
                 chat.flushToStore()
                 conversationStore.saveNow()
             }
+            if phase == .background {
+                // 锁屏/切后台时关掉所有模态，避免 UIkit 模态残留后整屏点击失效
+                settingsOpen = false
+                activeSheet = nil
+                confirmClearChat = false
+                sidebarOpen = false
+            }
         }
         .onChange(of: conversationStore.conversations.map(\.id)) { ids in
             guard let current = chat.conversation, !ids.contains(current.id) else { return }
@@ -110,12 +118,6 @@ struct RootView: View {
         }
         .sheet(item: $activeSheet) { sheet in
             switch sheet {
-            case .settings:
-                SettingsView()
-                    .environmentObject(settingsStore)
-                    .environmentObject(conversationStore)
-                    .environmentObject(modelCatalog)
-                    .environmentObject(sync)
             case .share(let url):
                 ShareSheet(url: url)
             case .rename(let conversation):
@@ -134,6 +136,29 @@ struct RootView: View {
             }
             Button("取消", role: .cancel) { }
         }
+    }
+
+    /// 设置页用 App 内覆盖层呈现，不再走 UIKit sheet：
+    /// 长时间停留 + 锁屏后，SwiftUI sheet 会留下看不见的模态把整屏点击吃掉，这是之前的卡菜单 bug。
+    @ViewBuilder
+    private var settingsOverlay: some View {
+        if settingsOpen {
+            SettingsView()
+                .environment(\.settingsCloseAction, { settingsOpen = false })
+                .environmentObject(settingsStore)
+                .environmentObject(conversationStore)
+                .environmentObject(modelCatalog)
+                .environmentObject(sync)
+                .background(DSTheme.background.ignoresSafeArea())
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .zIndex(30)
+        }
+    }
+
+    private func openSettings() {
+        sidebarOpen = false
+        activeSheet = nil
+        settingsOpen = true
     }
 
     @ViewBuilder
@@ -192,7 +217,7 @@ struct RootView: View {
             sidebarOpen = true
         } else if screen == "settings" {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-                activeSheet = .settings
+                settingsOpen = true
             }
         }
     }

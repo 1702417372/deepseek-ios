@@ -47,6 +47,7 @@ struct SettingsView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("完成") {
                         save()
+                        closeSettings()
                         dismiss()
                     }
                     .fontWeight(.semibold)
@@ -389,7 +390,7 @@ struct SettingsView: View {
             HStack {
                 Text("版本")
                 Spacer()
-                Text("1.6.0").foregroundStyle(DSTheme.textSecondary)
+                Text("1.7.0").foregroundStyle(DSTheme.textSecondary)
             }
             HStack {
                 Text("接口")
@@ -543,5 +544,19 @@ struct SettingsView: View {
             }
             isTesting = false
         }
+    }
+}
+
+
+// MARK: - 关闭设置页（供 RootView 覆盖层使用）
+
+private struct SettingsCloseActionKey: EnvironmentKey {
+    static let defaultValue: () -> Void = { }
+}
+
+extension EnvironmentValues {
+    var settingsCloseAction: () -> Void {
+        get { self[SettingsCloseActionKey.self] }
+        set { self[SettingsCloseActionKey.self] = newValue }
     }
 }
