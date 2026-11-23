@@ -8,7 +8,7 @@ struct WelcomeView: View {
 
             AssistantAvatar(size: 66)
 
-            Text("欢迎回来，随时开始吧")
+            Text("你好，我能帮什么忙吗？")
                 .font(.system(size: 20, weight: .semibold, design: .rounded))
                 .foregroundStyle(DSTheme.textPrimary)
 

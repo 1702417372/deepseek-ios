@@ -27,6 +27,7 @@ struct ComposerBar: View {
 
     @State private var photoItem: PhotosPickerItem?
     @State private var showFileImporter = false
+    @State private var showFileMenu = false
     @State private var isProcessing = false
     @State private var isTranscribing = false
     @State private var showCamera = false
@@ -76,6 +77,11 @@ struct ComposerBar: View {
                 onCancel: { showCamera = false }
             )
             .ignoresSafeArea()
+        }
+        .confirmationDialog("选择文件来源", isPresented: $showFileMenu, titleVisibility: .hidden) {
+            Button("本地文件") { showFileImporter = true }
+            Button("微信文件") { showFileImporter = true }
+            Button("取消", role: .cancel) { }
         }
         .fileImporter(
             isPresented: $showFileImporter,
@@ -225,7 +231,7 @@ struct ComposerBar: View {
             }
             .buttonStyle(.plain)
             quickAction(title: "文件", icon: "doc") {
-                showFileImporter = true
+                showFileMenu = true
             }
         }
     }
