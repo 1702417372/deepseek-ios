@@ -23,6 +23,7 @@ struct ChatScreen: View {
     private var settings: AppSettings { settingsStore.settings }
     private var modelOption: ModelOption? { modelCatalog.option(for: settings.model) }
     private var modelName: String { modelOption?.shortName ?? settings.resolvedModel.title }
+    private var isHome: Bool { conversation?.isEmpty ?? true }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -39,7 +40,8 @@ struct ChatScreen: View {
                 isFocused: $isInputFocused,
                 attachments: $attachments,
                 isStreaming: chat.isStreaming,
-                modelOption: modelOption,
+                showsQuickActions: isHome,
+                modelName: modelName,
                 settings: settings,
                 onSend: sendDraft,
                 onStop: { chat.stop() },
@@ -47,7 +49,7 @@ struct ChatScreen: View {
                 onToggleThinking: toggleThinking,
                 onToggleWebSearch: toggleWebSearch,
                 onNewChat: onNewChat,
-                onClear: { chat.clearCurrentConversation() },
+                onClearConversation: { chat.clearCurrentConversation() },
                 onOpenSettings: onOpenSettings,
                 onToast: onToast
             )
@@ -62,6 +64,12 @@ struct ChatScreen: View {
                 onToast(message)
                 tts.errorMessage = nil
             }
+        }
+        .onChange(of: chat.isStreaming) { streaming in
+            guard !streaming, settings.autoReadAnswers else { return }
+            guard let last = conversation?.messages.last else { return }
+            guard last.role == .assistant, !last.content.isEmpty, !last.isRefused else { return }
+            speak(last)
         }
         .alert("请求失败", isPresented: errorBinding) {
             Button("重试") { chat.regenerate(settings: settings) }
@@ -80,33 +88,58 @@ struct ChatScreen: View {
         )
     }
 
+    // MARK: - 顶栏
+
+    @ViewBuilder
     private var topBar: some View {
-        HStack(spacing: 4) {
-            iconButton("line.3.horizontal", action: onMenu)
-
-            Spacer(minLength: 0)
-
-            VStack(spacing: 1) {
-                Text("DeepSeek")
-                    .font(.system(size: 17, weight: .semibold, design: .rounded))
-                    .foregroundStyle(DSTheme.textPrimary)
-                Text(modelName)
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(DSTheme.textSecondary)
+        if isHome {
+            HStack(spacing: 10) {
+                circleButton("line.3.horizontal", action: onMenu)
+                Spacer(minLength: 0)
+                circleButton(settings.autoReadAnswers ? "speaker.wave.2.fill" : "speaker.slash", action: toggleAutoRead)
+                circleButton("plus", action: onNewChat)
             }
-
-            Spacer(minLength: 0)
-
-            iconButton("plus", action: onNewChat)
+            .padding(.horizontal, 16)
+            .padding(.top, 4)
+            .padding(.bottom, 6)
+        } else {
+            HStack(spacing: 4) {
+                circleButton("line.3.horizontal", action: onMenu)
+                Spacer(minLength: 0)
+                VStack(spacing: 1) {
+                    Text("DeepSeek")
+                        .font(.system(size: 17, weight: .semibold, design: .rounded))
+                        .foregroundStyle(DSTheme.textPrimary)
+                    Text(modelName)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(DSTheme.textSecondary)
+                }
+                Spacer(minLength: 0)
+                circleButton("plus", action: onNewChat)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(DSTheme.background)
+            .overlay(alignment: .bottom) {
+                Rectangle()
+                    .fill(DSTheme.hairline.opacity(0.25))
+                    .frame(height: 0.5)
+            }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-        .background(DSTheme.background)
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(DSTheme.hairline.opacity(0.25))
-                .frame(height: 0.5)
+    }
+
+    private func circleButton(_ systemName: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 17, weight: .medium))
+                .foregroundStyle(DSTheme.textPrimary)
+                .frame(width: 40, height: 40)
+                .background(DSTheme.surface, in: Circle())
+                .overlay(Circle().stroke(DSTheme.hairline.opacity(0.25), lineWidth: 0.5))
+                .shadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: 2)
+                .contentShape(Circle())
         }
+        .buttonStyle(.plain)
     }
 
     private var apiKeyBanner: some View {
@@ -128,16 +161,7 @@ struct ChatScreen: View {
         .buttonStyle(.plain)
     }
 
-    private func iconButton(_ systemName: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 17, weight: .medium))
-                .foregroundStyle(DSTheme.textPrimary)
-                .frame(width: 34, height: 34)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
+    // MARK: - 消息列表
 
     private var messageList: some View {
         ScrollViewReader { proxy in
@@ -168,11 +192,8 @@ struct ChatScreen: View {
                     .padding(.top, 14)
                     .padding(.bottom, 8)
                 } else {
-                    WelcomeView { suggestion in
-                        draft = suggestion
-                        isInputFocused = true
-                    }
-                    .padding(.top, 8)
+                    WelcomeView()
+                        .padding(.top, 8)
                 }
             }
             .scrollDismissesKeyboard(.interactively)
@@ -214,6 +235,8 @@ struct ChatScreen: View {
         if chat.send(draft, attachments: attachments, settings: settings) {
             draft = ""
             attachments = []
+        } else if !settings.hasAPIKey {
+            onToast("先在设置里填 API Key")
         }
     }
 
@@ -225,6 +248,13 @@ struct ChatScreen: View {
             apiKey: settings.apiKey,
             baseURL: settings.baseURL
         )
+    }
+
+    private func toggleAutoRead() {
+        var updated = settingsStore.settings
+        updated.autoReadAnswers.toggle()
+        settingsStore.settings = updated
+        onToast(updated.autoReadAnswers ? "已开启自动朗读" : "已关闭自动朗读")
     }
 
     private func toggleThinking() {

@@ -85,7 +85,7 @@ button{border:0;background:none;padding:0;cursor:pointer;touch-action: manipulat
 .test-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:4px 0 16px}
 .btn{min-height:40px;padding:0 16px;display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--border);border-radius:12px;background:var(--surface);color:var(--text);font-size:13.5px;font-weight:500}.btn:active{opacity:.8}.btn[disabled]{opacity:.5}
 .btn.danger{color:var(--danger);background:var(--danger-soft);border-color:transparent}.btn.danger-solid{color:#fff;background:var(--danger);border-color:var(--danger)}.test-status{flex:1;min-width:120px;color:var(--muted);font-size:11.5px;line-height:1.5}.test-status.success{color:#1F9D6B}
-.test-status.error{color:var(--danger)}.hr{margin:18px 0;border:0;border-top:1px solid var(--border)}.security{margin:10px 2px 0;color:var(--muted);font-size:11px;line-height:1.7}.confirm-overlay{z-index:110}
+.test-status.error{color:var(--danger)}.sync-status{display:block;min-height:16px;margin:0 2px 14px;color:var(--muted);font-size:11.5px;line-height:1.5}.sync-status.success{color:#1F9D6B}.sync-status.error{color:var(--danger)}.hr{margin:18px 0;border:0;border-top:1px solid var(--border)}.security{margin:10px 2px 0;color:var(--muted);font-size:11px;line-height:1.7}.confirm-overlay{z-index:110}
 .confirm-card{position:absolute;left:50%;top:50%;width:min(86vw,340px);padding:22px 20px 16px;background:var(--bg);border-radius:22px;box-shadow:0 20px 60px rgba(0,0,0,.3);transform:translate(-50%,-50%) scale(.96);transition:transform .2s}
 .overlay.open .confirm-card{transform:translate(-50%,-50%) scale(1)}.confirm-card h3{margin:0 0 8px;font-size:17px;font-weight:650}.confirm-card p{margin:0 0 20px;color:var(--muted);font-size:13.5px;line-height:1.6;overflow-wrap:anywhere}
 .confirm-actions{display:flex;justify-content:flex-end;gap:8px}
@@ -203,8 +203,30 @@ button{border:0;background:none;padding:0;cursor:pointer;touch-action: manipulat
           <span id="testStatus" class="test-status" role="status"></span>
         </div>
         <hr class="hr">
+        <div class="group-title">数据</div>
+        <div class="test-row">
+          <button id="exportBtn" class="btn" type="button">导出全部对话</button>
+          <button id="importBtn" class="btn" type="button">导入对话</button>
+          <input id="importFile" type="file" accept=".json,application/json" hidden>
+        </div>
+        <p class="hint">导出为 iOS 原生版共用的 deepseek-clone JSON；导入时按 id 合并。</p>
+        <div class="group-title">同步</div>
+        <label class="field" for="syncUrl"><span>同步地址</span>
+          <input id="syncUrl" type="url" inputmode="url" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="https://xxx.workers.dev/sync">
+        </label>
+        <label class="field" for="syncKey"><span>同步密钥</span>
+          <input id="syncKey" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="X-Sync-Key">
+          <p class="hint">密钥只保存在本机 localStorage，请求通过 X-Sync-Key 头发送。</p>
+        </label>
+        <div class="test-row">
+          <button id="syncUpload" class="btn" type="button">上传到云端</button>
+          <button id="syncDownload" class="btn" type="button">从云端下载</button>
+          <button id="syncBoth" class="btn" type="button">双向同步</button>
+        </div>
+        <div id="syncStatus" class="sync-status" role="status"></div>
+        <hr class="hr">
         <button id="clearAll" class="btn danger" type="button">清空全部会话</button>
-        <p class="security">安全警告：API Key 以明文保存在本机浏览器的 localStorage 中，页面没有后端加密。请勿在公用设备上保存 Key；如怀疑泄露，请立即前往 DeepSeek 开放平台吊销。清除浏览器数据会一并删除 Key 与所有对话。</p>
+        <p class="security">安全警告：API Key 与同步密钥均以明文保存在本机浏览器的 localStorage 中，页面没有后端加密。请勿在公用设备上保存密钥；如怀疑泄露，请立即前往 DeepSeek 开放平台吊销。清除浏览器数据会一并删除密钥与所有对话。</p>
       </div>
     </section>
   </div>
@@ -239,6 +261,8 @@ button{border:0;background:none;padding:0;cursor:pointer;touch-action: manipulat
     settingsOverlay: $('settingsOverlay'), apiKey: $('apiKey'), baseUrl: $('baseUrl'), toggleKey: $('toggleKey'),
     temp: $('temp'), tempValue: $('tempValue'), systemPrompt: $('systemPrompt'), testBtn: $('testBtn'),
     testStatus: $('testStatus'), clearAll: $('clearAll'), closeSettings: $('closeSettings'),
+    exportBtn: $('exportBtn'), importBtn: $('importBtn'), importFile: $('importFile'), syncUrl: $('syncUrl'), syncKey: $('syncKey'),
+    syncUpload: $('syncUpload'), syncDownload: $('syncDownload'), syncBoth: $('syncBoth'), syncStatus: $('syncStatus'),
     confirmOverlay: $('confirmOverlay'), confirmTitle: $('confirmTitle'), confirmText: $('confirmText'),
     confirmOk: $('confirmOk'), confirmCancel: $('confirmCancel'), toast: $('toast'),
     menuBtn: $('menuBtn'), newChatBtn: $('newChatBtn')
@@ -261,7 +285,9 @@ button{border:0;background:none;padding:0;cursor:pointer;touch-action: manipulat
     baseURL: typeof storedSettings.baseURL === 'string' ? storedSettings.baseURL : DEFAULT_BASE,
     model: normalizeModel(storedSettings.model),
     temperature: Math.max(0, Math.min(2, Number(storedSettings.temperature))),
-    systemPrompt: typeof storedSettings.systemPrompt === 'string' ? storedSettings.systemPrompt : ''
+    systemPrompt: typeof storedSettings.systemPrompt === 'string' ? storedSettings.systemPrompt : '',
+    syncURL: typeof storedSettings.syncURL === 'string' ? storedSettings.syncURL : '',
+    syncKey: typeof storedSettings.syncKey === 'string' ? storedSettings.syncKey : ''
   };
   if (!isFinite(settings.temperature)) settings.temperature = 1;
   function normalizeSession(raw) {
@@ -311,7 +337,7 @@ button{border:0;background:none;padding:0;cursor:pointer;touch-action: manipulat
   var currentId = read('currentId', null);
   if (typeof currentId !== 'string' || !sessions.some(function (s) { return s.id === currentId; })) currentId = null;
   var streaming = false, controller = null, streamToken = 0, renderTimer = null, autoScroll = true, thinkOpen = {};
-  var pendingConfirm = null, toastTimer = null, pressTimer = null, suppressClick = false, vvTimer = null, vv = window.visualViewport;
+  var pendingConfirm = null, toastTimer = null, pressTimer = null, suppressClick = false, vvTimer = null, vv = window.visualViewport, syncBusy = false;
   function escapeHtml(value) {
     return String(value).replace(/[&<>"']/g, function (ch) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];

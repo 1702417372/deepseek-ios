@@ -1,10 +1,12 @@
 import SwiftUI
 import Foundation
+import UniformTypeIdentifiers
 
 struct SettingsView: View {
     @EnvironmentObject private var settingsStore: SettingsStore
     @EnvironmentObject private var conversationStore: ConversationStore
     @EnvironmentObject private var catalog: ModelCatalog
+    @EnvironmentObject private var sync: SyncService
     @Environment(\.dismiss) private var dismiss
 
     @State private var draft = AppSettings()
@@ -15,6 +17,11 @@ struct SettingsView: View {
     @State private var testFailed = false
     @State private var confirmClear = false
     @State private var isRefreshingModels = false
+    @State private var shareItem: ShareItem?
+    @State private var importStatus: String?
+    @State private var showImporter = false
+    @State private var isSyncing = false
+    @State private var syncStatus: String?
 
     private var thinkingLocksSampling: Bool {
         draft.thinkingEnabled || draft.webSearchEnabled || draft.safetyCheckEnabled || draft.autoTitleEnabled
@@ -31,6 +38,7 @@ struct SettingsView: View {
                 personalizationSection
                 voiceSection
                 dataSection
+                syncSection
                 aboutSection
             }
             .navigationTitle("设置")
@@ -59,6 +67,16 @@ struct SettingsView: View {
                 }
             }
             .onDisappear { save() }
+            .fileImporter(
+                isPresented: $showImporter,
+                allowedContentTypes: [.json, .plainText, .data],
+                allowsMultipleSelection: false
+            ) { result in
+                handleImport(result)
+            }
+            .sheet(item: $shareItem) { item in
+                ShareSheet(url: item.url)
+            }
             .task {
                 if catalog.options.isEmpty {
                     await catalog.refresh(apiKey: draft.apiKey, baseURL: draft.baseURL)
@@ -284,6 +302,7 @@ struct SettingsView: View {
                 Text("女声 · stella").tag("stella")
                 Text("男声 · tide").tag("tide")
             }
+            Toggle("回答生成后自动朗读", isOn: $draft.autoReadAnswers)
         } header: {
             Text("语音")
         } footer: {
@@ -293,6 +312,30 @@ struct SettingsView: View {
 
     private var dataSection: some View {
         Section {
+            Button {
+                exportAll()
+            } label: {
+                HStack {
+                    Label("导出全部对话（JSON）", systemImage: "square.and.arrow.up")
+                    Spacer()
+                    Text("\(conversationStore.all.count) 个会话")
+                        .font(.system(size: 12))
+                        .foregroundStyle(DSTheme.textSecondary)
+                }
+            }
+
+            Button {
+                showImporter = true
+            } label: {
+                Label("导入对话文件", systemImage: "square.and.arrow.down")
+            }
+
+            if let importStatus {
+                Text(importStatus)
+                    .font(.system(size: 12))
+                    .foregroundStyle(DSTheme.textSecondary)
+            }
+
             Button(role: .destructive) {
                 confirmClear = true
             } label: {
@@ -300,6 +343,44 @@ struct SettingsView: View {
             }
         } header: {
             Text("数据")
+        } footer: {
+            Text("导出的 JSON 与网页版通用；也能导入 {title, messages} 结构的第三方历史或 Markdown 文本，按会话 id 合并。")
+        }
+    }
+
+    private var syncSection: some View {
+        Section {
+            TextField("同步地址（https://…）", text: $draft.syncURL)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .keyboardType(.URL)
+            SecureField("同步密钥", text: $draft.syncKey)
+            Toggle("启动时自动同步", isOn: $draft.autoSyncEnabled)
+
+            HStack(spacing: 12) {
+                Button("上传") { syncUpload() }
+                Button("下载") { syncDownload() }
+                Button("双向同步") { syncBoth() }
+                Spacer()
+                if isSyncing {
+                    ProgressView().controlSize(.mini)
+                }
+            }
+            .disabled(isSyncing)
+
+            if let syncStatus {
+                Text(syncStatus)
+                    .font(.system(size: 12))
+                    .foregroundStyle(DSTheme.textSecondary)
+            } else if let last = sync.lastSyncDate {
+                Text("上次同步：\(DSTheme.dateString(last))")
+                    .font(.system(size: 12))
+                    .foregroundStyle(DSTheme.textSecondary)
+            }
+        } header: {
+            Text("多端同步")
+        } footer: {
+            Text("配合自建同步服务使用（仓库里的 docs/sync-worker.js，部署到 Cloudflare Workers，免费）。App 与网页版共用同一份 JSON 和 X-Sync-Key 协议。")
         }
     }
 
@@ -308,7 +389,7 @@ struct SettingsView: View {
             HStack {
                 Text("版本")
                 Spacer()
-                Text("1.4.0").foregroundStyle(DSTheme.textSecondary)
+                Text("1.5.0").foregroundStyle(DSTheme.textSecondary)
             }
             HStack {
                 Text("接口")
@@ -337,6 +418,104 @@ struct SettingsView: View {
         value.baseURL = url.isEmpty ? "https://api.deepseek.com" : url
         value.fontScale = min(max(value.fontScale, 0.8), 1.5)
         settingsStore.settings = value
+    }
+
+    private func exportAll() {
+        do {
+            let data = try ConversationArchive.exportData(conversationStore.all)
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent(ConversationArchive.suggestedFileName())
+            try data.write(to: url, options: .atomic)
+            shareItem = ShareItem(url: url)
+            importStatus = "已生成导出文件，选择「存储到文件」或分享即可"
+        } catch {
+            importStatus = "导出失败：\(error.localizedDescription)"
+        }
+    }
+
+    private func handleImport(_ result: Result<[URL], Error>) {
+        switch result {
+        case .failure(let error):
+            importStatus = "导入失败：\(error.localizedDescription)"
+        case .success(let urls):
+            guard let url = urls.first else { return }
+            let accessed = url.startAccessingSecurityScopedResource()
+            defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+            do {
+                let data = try Data(contentsOf: url)
+                let incoming = try ConversationArchive.decode(data)
+                let merged = ConversationArchive.merge(incoming, into: conversationStore.all)
+                conversationStore.replaceAll(merged)
+                importStatus = "已导入 \(incoming.count) 个会话（当前共 \(merged.count) 个）"
+            } catch {
+                importStatus = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            }
+        }
+    }
+
+    private func syncUpload() {
+        save()
+        let url = draft.syncURL
+        let key = draft.syncKey
+        guard SyncService.isReady(urlString: url, key: key) else {
+            syncStatus = "请先填写 https:// 开头的同步地址和同步密钥"
+            return
+        }
+        isSyncing = true
+        syncStatus = nil
+        Task { @MainActor in
+            do {
+                try await sync.push(conversationStore.all, urlString: url, key: key)
+                syncStatus = "已上传 \(conversationStore.all.count) 个会话"
+            } catch {
+                syncStatus = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            }
+            isSyncing = false
+        }
+    }
+
+    private func syncDownload() {
+        save()
+        let url = draft.syncURL
+        let key = draft.syncKey
+        guard SyncService.isReady(urlString: url, key: key) else {
+            syncStatus = "请先填写 https:// 开头的同步地址和同步密钥"
+            return
+        }
+        isSyncing = true
+        syncStatus = nil
+        Task { @MainActor in
+            do {
+                let remote = try await sync.pull(urlString: url, key: key)
+                let merged = ConversationArchive.merge(remote, into: conversationStore.all)
+                conversationStore.replaceAll(merged)
+                syncStatus = "已下载 \(remote.count) 个会话（合并后共 \(merged.count) 个）"
+            } catch {
+                syncStatus = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            }
+            isSyncing = false
+        }
+    }
+
+    private func syncBoth() {
+        save()
+        let url = draft.syncURL
+        let key = draft.syncKey
+        guard SyncService.isReady(urlString: url, key: key) else {
+            syncStatus = "请先填写 https:// 开头的同步地址和同步密钥"
+            return
+        }
+        isSyncing = true
+        syncStatus = nil
+        Task { @MainActor in
+            do {
+                let merged = try await sync.syncBoth(local: conversationStore.all, urlString: url, key: key)
+                conversationStore.replaceAll(merged)
+                syncStatus = "双向同步完成，当前共 \(merged.count) 个会话"
+            } catch {
+                syncStatus = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            }
+            isSyncing = false
+        }
     }
 
     private func refreshModels() {

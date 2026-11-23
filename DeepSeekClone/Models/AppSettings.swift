@@ -55,6 +55,12 @@ struct AppSettings: Codable, Equatable {
     var fontScale: Double = 1.0
     /// 朗读音色：stella（女声）/ tide（男声）
     var ttsVoice: String = "stella"
+    /// 回答生成完自动朗读
+    var autoReadAnswers: Bool = false
+    /// 多端同步
+    var syncURL: String = ""
+    var syncKey: String = ""
+    var autoSyncEnabled: Bool = true
 
     init() {}
 
@@ -73,6 +79,10 @@ struct AppSettings: Codable, Equatable {
         case contextCharacterLimit
         case fontScale
         case ttsVoice
+        case autoReadAnswers
+        case syncURL
+        case syncKey
+        case autoSyncEnabled
     }
 
     init(from decoder: Decoder) throws {
@@ -91,6 +101,10 @@ struct AppSettings: Codable, Equatable {
         contextCharacterLimit = try container.decodeIfPresent(Int.self, forKey: .contextCharacterLimit) ?? 60000
         fontScale = try container.decodeIfPresent(Double.self, forKey: .fontScale) ?? 1.0
         ttsVoice = try container.decodeIfPresent(String.self, forKey: .ttsVoice) ?? "stella"
+        autoReadAnswers = try container.decodeIfPresent(Bool.self, forKey: .autoReadAnswers) ?? false
+        syncURL = try container.decodeIfPresent(String.self, forKey: .syncURL) ?? ""
+        syncKey = try container.decodeIfPresent(String.self, forKey: .syncKey) ?? ""
+        autoSyncEnabled = try container.decodeIfPresent(Bool.self, forKey: .autoSyncEnabled) ?? true
     }
 
     func encode(to encoder: Encoder) throws {
@@ -109,6 +123,10 @@ struct AppSettings: Codable, Equatable {
         try container.encode(contextCharacterLimit, forKey: .contextCharacterLimit)
         try container.encode(fontScale, forKey: .fontScale)
         try container.encode(ttsVoice, forKey: .ttsVoice)
+        try container.encode(autoReadAnswers, forKey: .autoReadAnswers)
+        try container.encode(syncURL, forKey: .syncURL)
+        try container.encode(syncKey, forKey: .syncKey)
+        try container.encode(autoSyncEnabled, forKey: .autoSyncEnabled)
     }
 
     var resolvedModel: DeepSeekModel {

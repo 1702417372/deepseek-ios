@@ -63,6 +63,13 @@ final class ConversationStore: ObservableObject {
         saveSoon()
     }
 
+    var all: [Conversation] { conversations }
+
+    func replaceAll(_ newConversations: [Conversation]) {
+        conversations = newConversations
+        saveSoon()
+    }
+
     func deleteAll() {
         conversations.removeAll()
         saveSoon()

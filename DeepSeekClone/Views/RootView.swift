@@ -9,6 +9,7 @@ struct RootView: View {
 
     @StateObject private var chat = ChatViewModel()
     @StateObject private var toast = ToastCenter()
+    @StateObject private var sync = SyncService()
 
     @State private var sidebarOpen = false
     @State private var didBootstrap = false
@@ -85,7 +86,10 @@ struct RootView: View {
         .animation(.spring(response: 0.32, dampingFraction: 0.86), value: sidebarOpen)
         .animation(.easeInOut(duration: 0.2), value: toast.message)
         .onAppear(perform: bootstrap)
-        .task { await refreshModelsIfNeeded() }
+        .task {
+            await refreshModelsIfNeeded()
+            await autoSyncIfConfigured()
+        }
         .onChange(of: settingsStore.settings.apiKey) { _ in
             Task { await refreshModelsIfNeeded() }
         }
@@ -111,6 +115,7 @@ struct RootView: View {
                     .environmentObject(settingsStore)
                     .environmentObject(conversationStore)
                     .environmentObject(modelCatalog)
+                    .environmentObject(sync)
             case .share(let url):
                 ShareSheet(url: url)
             case .rename(let conversation):
@@ -189,6 +194,23 @@ struct RootView: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
                 activeSheet = .settings
             }
+        }
+    }
+
+    /// 启动时后台做一次双向同步（配置了同步地址才执行）。
+    private func autoSyncIfConfigured() async {
+        let settings = settingsStore.settings
+        guard settings.autoSyncEnabled,
+              SyncService.isReady(urlString: settings.syncURL, key: settings.syncKey) else { return }
+        do {
+            let merged = try await sync.syncBoth(
+                local: conversationStore.all,
+                urlString: settings.syncURL,
+                key: settings.syncKey
+            )
+            conversationStore.replaceAll(merged)
+        } catch {
+            // 启动同步失败保持静默，用户在设置页手动同步能看到具体错误
         }
     }
 
