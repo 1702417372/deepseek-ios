@@ -18,6 +18,20 @@ final class SyncService: ObservableObject {
         var conversations: [Conversation]
     }
 
+    /// 云端返回的是上面的 Payload（没有 exportedAt），这里单独宽松解码。
+    private struct RemotePayload: Decodable {
+        var conversations: [Conversation] = []
+
+        private enum CodingKeys: String, CodingKey {
+            case conversations
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            conversations = try container.decodeIfPresent([Conversation].self, forKey: .conversations) ?? []
+        }
+    }
+
     init() {
         let configuration = URLSessionConfiguration.default
         configuration.timeoutIntervalForRequest = 45
@@ -98,7 +112,7 @@ final class SyncService: ObservableObject {
         request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         request.setValue(key, forHTTPHeaderField: "X-Sync-Key")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue("DeepSeekClone/1.5 (iOS)", forHTTPHeaderField: "User-Agent")
+        request.setValue("DeepSeekClone/1.6 (iOS)", forHTTPHeaderField: "User-Agent")
         if let body {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = body
