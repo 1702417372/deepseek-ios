@@ -2,6 +2,7 @@ import SwiftUI
 import Foundation
 import PhotosUI
 import UIKit
+import AVFoundation
 
 struct ComposerBar: View {
     @Binding var text: String
@@ -26,6 +27,7 @@ struct ComposerBar: View {
     @State private var showFileImporter = false
     @State private var isProcessing = false
     @State private var isTranscribing = false
+    @State private var showCamera = false
     @StateObject private var recorder = VoiceRecorder()
 
     private var trimmedText: String {
@@ -64,6 +66,16 @@ struct ComposerBar: View {
             if value >= VoiceRecorder.maxDuration, recorder.isRecording {
                 finishRecordingAndTranscribe()
             }
+        }
+        .fullScreenCover(isPresented: $showCamera) {
+            CameraPicker(
+                onImage: { image in
+                    showCamera = false
+                    handleCapturedPhoto(image)
+                },
+                onCancel: { showCamera = false }
+            )
+            .ignoresSafeArea()
         }
         .fileImporter(
             isPresented: $showFileImporter,
@@ -155,14 +167,15 @@ struct ComposerBar: View {
             .disabled(isProcessing)
 
             Button {
-                if isProcessing { return }
-                showFileImporter = true
+                openCamera()
             } label: {
-                composerIcon("paperclip")
+                composerIcon("camera")
             }
-            .disabled(isProcessing)
+            .disabled(isProcessing || isTranscribing)
 
             Menu {
+                Button { showFileImporter = true } label: { Label("选择文件", systemImage: "paperclip") }
+                Divider()
                 Button { onNewChat() } label: { Label("新建对话", systemImage: "square.and.pencil") }
                 Button { onClear() } label: { Label("清空当前对话", systemImage: "trash") }
                 Divider()
@@ -273,6 +286,50 @@ struct ComposerBar: View {
                 }
             }
             .padding(.horizontal, 4)
+        }
+    }
+
+    // MARK: - 拍照
+
+    private func openCamera() {
+        guard CameraPicker.isAvailable else {
+            onToast("这台设备没有可用相机（iOS 模拟器不支持拍照）")
+            return
+        }
+        guard attachments.count < 5 else {
+            onToast("最多一次附带 5 个附件")
+            return
+        }
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized:
+            showCamera = true
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .video) { granted in
+                Task { @MainActor in
+                    if granted {
+                        showCamera = true
+                    } else {
+                        onToast("没有相机权限：设置 → 隐私与安全性 → 相机 → 打开 DeepSeek")
+                    }
+                }
+            }
+        default:
+            onToast("没有相机权限：设置 → 隐私与安全性 → 相机 → 打开 DeepSeek")
+        }
+    }
+
+    private func handleCapturedPhoto(_ image: UIImage) {
+        guard attachments.count < 5 else { return }
+        isProcessing = true
+        Task { @MainActor in
+            defer { isProcessing = false }
+            let name = "照片-\(attachments.count + 1).jpg"
+            if let attachment = await AttachmentService.makeImageAttachment(from: image, name: name) {
+                attachments.append(attachment)
+                onToast("已拍照并识别文字")
+            } else {
+                onToast("照片处理失败")
+            }
         }
     }
 

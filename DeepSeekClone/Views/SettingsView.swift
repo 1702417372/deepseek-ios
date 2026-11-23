@@ -308,7 +308,7 @@ struct SettingsView: View {
             HStack {
                 Text("版本")
                 Spacer()
-                Text("1.3.0").foregroundStyle(DSTheme.textSecondary)
+                Text("1.4.0").foregroundStyle(DSTheme.textSecondary)
             }
             HStack {
                 Text("接口")

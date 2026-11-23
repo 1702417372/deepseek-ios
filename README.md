@@ -1,4 +1,4 @@
-# DeepSeek 风格 iOS 客户端 v1.3（SwiftUI · 官方鲸鱼图标 · 多模态/联网/文件/语音）
+# DeepSeek 风格 iOS 客户端 v1.4（SwiftUI · 官方鲸鱼图标 · 多模态/联网/文件/语音/拍照）
 
 一个模仿 DeepSeek 官方 App 界面的非官方 iOS 客户端，**直接调用 DeepSeek 2026 版官方 API**（Chat Completions）：思考模式与强度、联网搜索/阅读链接、图片理解、文件（PDF/Word/PPT）解析、会话标题、引用来源卡片、Markdown 渲染。已通过 GitHub Actions 在 macOS 上编译成功，并用 iOS 模拟器截图验证。
 
@@ -50,7 +50,7 @@ App 图标（1024×1024，已放进工程）：![图标](docs/screenshots/app-ic
 - **动态模型列表**：启动时 GET /models 拉取（DeepSeek-V4.1-Flash / DeepSeek-V4-Pro …），支持自定义模型 ID
 - **思考模式**：开关 + 强度（低/高/极高），思维链以「已深度思考」折叠块展示
 - **联网搜索 / 阅读链接**：服务端工具，界面显示搜索中状态、来源卡片（可展开）与正文引用链接
-- **图片输入**：相册选图 → 本地压缩 + OCR → 以多模态 content part 发送（仅 V4.1-Flash）
+- **图片输入**：**拍照** 或 相册选图 → 本地压缩 + OCR → 以多模态 content part 发送（仅 V4.1-Flash）
 - **文件输入**：txt/md/代码/PDF 本地提取文本；PDF/Word/PPT 上传 Files API 云端解析（`file_id` 引用）
 - 附件预览条（缩略图/文件名/字数），可删除
 - **语音输入**：输入框麦克风按钮录音（16k 单声道 WAV）→ 官方 ASR 转文字填入输入框，最长约 110 秒
